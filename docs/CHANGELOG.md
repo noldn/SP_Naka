@@ -1,0 +1,12 @@
+# Änderungsprotokoll
+
+Wesentliche Änderungen werden hier in umgekehrt chronologischer Reihenfolge erfasst.
+
+## Noch nicht veröffentlicht
+
+### Hinzugefügt
+
+- Grundstruktur für Code, Tests, Konfiguration und lokale Daten.
+- Entwicklungsleitplanken in `AGENTS.md`.
+- Projektziel und Erfolgskriterien in `PROJECT_GOAL.md`.
+- Strukturierte Dokumentation für Entscheidungen, Notizen, Daten und Intranet-Inhalte.

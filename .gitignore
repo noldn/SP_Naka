@@ -1,0 +1,48 @@
+# Lokale Konfiguration und Zugangsdaten
+.env
+.env.*
+!.env.example
+
+# Lokale Daten; Dokumentation und Ordnerstruktur bleiben versioniert
+data/local/**
+!data/local/.gitkeep
+
+# Lokale Datenbanken
+*.db
+*.sqlite
+*.sqlite3
+
+# Generierte Ausgaben
+output/
+reports/generated/
+
+# Vertrauliche oder ausschließlich lokale Projektnotizen
+docs/private/**
+!docs/private/.gitkeep
+
+# Betriebssystem und Editoren
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Protokolle und temporäre Dateien
+*.log
+tmp/
+temp/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node.js
+node_modules/
+dist/
+build/
+coverage/
