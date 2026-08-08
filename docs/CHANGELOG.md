@@ -10,3 +10,5 @@ Wesentliche Änderungen werden hier in umgekehrt chronologischer Reihenfolge erf
 - Entwicklungsleitplanken in `AGENTS.md`.
 - Projektziel und Erfolgskriterien in `PROJECT_GOAL.md`.
 - Strukturierte Dokumentation für Entscheidungen, Notizen, Daten und Intranet-Inhalte.
+- Ausfüllbare Mehrtabellen-Vorlage im Datenkatalog mit Feldern, Beziehungen,
+  Qualitätsprüfungen und Regeln für optionale Rohwarenzuordnungen.
