@@ -12,48 +12,171 @@ vor Änderungen lesen und beachten.
 5. Passende Tests und Dokumentation aktualisieren.
 6. Vor einem Commit prüfen, dass keine lokalen Daten oder Geheimnisse enthalten sind.
 
-## Leitplanken
 
-- Datenschutz, Nachvollziehbarkeit und Reproduzierbarkeit haben Vorrang vor Tempo.
-- Echte Rohdaten bleiben in `data/local/` oder außerhalb des Repositorys.
-- Eingabedaten werden standardmäßig nur gelesen und niemals stillschweigend verändert.
-- Keine personenbezogenen, vertraulichen oder lizenzrechtlich geschützten Inhalte committen.
-- Keine Zugangsdaten, Tokens, Kennwörter oder internen URLs in Code oder Dokumentation.
-- Pfade und Einstellungen werden konfiguriert, nicht fest in den Code geschrieben.
-- Für Tests nur kleine synthetische oder nachweislich anonymisierte Daten verwenden.
-- Analyseergebnisse müssen ihre Datenquelle, Methode, Annahmen und Grenzen nennen.
-- KI-Ausgaben gelten als Vorschläge und müssen vor fachlicher Verwendung geprüft werden.
-- Unsicherheiten dürfen nicht als gesicherte Fakten dargestellt werden.
+# Entwicklungs- und Sicherheitsrichtlinie NAKA
 
-## Anforderungen an Änderungen
+## 1. Grundprinzipien
 
-- Neue Funktionen benötigen einen nachvollziehbaren Test oder eine dokumentierte Begründung,
-  warum ein automatisierter Test nicht möglich ist.
-- Zufallsbasierte Analysen verwenden dokumentierte Seeds, soweit technisch möglich.
-- Abhängigkeiten werden sparsam ergänzt und mit Zweck und Version dokumentiert.
-- Fehler sollen verständliche Meldungen liefern, ohne vertrauliche Daten auszugeben.
-- Generierte Dateien und lokale Analyseergebnisse gehören nicht in Git.
-- Architekturentscheidungen werden unter `docs/decisions/` festgehalten.
-- Laufende Erkenntnisse gehören unter `docs/notes/`; vertrauliche Notizen nicht.
-- Benutzerrelevante Änderungen werden in `docs/CHANGELOG.md` ergänzt.
+Dieses Projekt verarbeitet interne Kalkulations-, Produktions- und Auftragsdaten.
 
-## Dokumentationsstandard
+Der Quellcode muss nachvollziehbar, reproduzierbar, testbar und revisionsfähig sein.
 
-Markdown (`.md`) ist das Standardformat, weil es reiner Text, Git-fähig und leicht
-in ein Intranet übertragbar ist. Jede fachliche Notiz enthält mindestens:
+KI-generierter Code gilt grundsätzlich als ungeprüfter Änderungsvorschlag. Er darf nicht ohne Tests und fachliche Prüfung produktiv eingesetzt werden.
 
-- Datum und Autor/in
-- Thema oder Fragestellung
-- Quelle beziehungsweise Datenbasis
-- Ergebnis oder Entscheidung
-- offene Punkte und nächste Schritte
+## 2. Schutz der Quelldaten
 
-## Definition of Done
+* Quelldaten werden ausschließlich lesend verarbeitet.
+* Originaldateien dürfen niemals verändert, umbenannt oder gelöscht werden.
+* Ausgaben werden ausschließlich in getrennte Ausgabe- oder Staging-Verzeichnisse geschrieben.
+* Produktive Proalpha-, Qlik- oder Datenbanktabellen dürfen nicht direkt verändert werden.
+* Schreibende Schnittstellen müssen ausdrücklich freigegeben und technisch getrennt implementiert werden.
+* Jeder produktive Lauf muss anhand der Eingabedateien, Konfiguration und Programmversion reproduzierbar sein.
 
-Eine Änderung ist abgeschlossen, wenn:
+## 3. Datenschutz und Vertraulichkeit
 
-- sie zum dokumentierten Projektziel passt,
-- relevante Tests erfolgreich sind,
-- die Dokumentation aktuell ist,
-- keine lokalen oder vertraulichen Daten im Git-Diff stehen,
-- Annahmen und Einschränkungen der Analyse nachvollziehbar sind.
+* Reale Unternehmensdaten dürfen nicht an nicht freigegebene externe KI-, Cloud- oder Analysedienste übertragen werden.
+* Zugangsdaten, API-Schlüssel, Passwörter und Verbindungszeichenfolgen dürfen niemals im Quellcode gespeichert werden.
+* Geheimnisse werden ausschließlich über Umgebungsvariablen oder einen freigegebenen Secret Store geladen.
+* Protokolle dürfen keine unnötigen personenbezogenen Daten oder Geschäftsgeheimnisse enthalten.
+* Testdaten sind nach Möglichkeit synthetisch oder anonymisiert.
+
+## 4. Versionsverwaltung
+
+* Sämtlicher Quellcode und sämtliche Konfigurationsdateien werden mit Git versioniert.
+* Der produktive Hauptbranch darf nicht direkt bearbeitet werden.
+* Änderungen erfolgen in separaten Feature- oder Bugfix-Branches.
+* Jede Änderung muss über einen nachvollziehbaren Commit verfügen.
+* Produktive Versionen werden mit einer Versionsnummer oder einem Git-Tag gekennzeichnet.
+* Force Pushes und das Löschen des Hauptbranches sind nicht zulässig.
+* Änderungen an fachlichen Berechnungsregeln müssen gesondert dokumentiert werden.
+
+## 5. Anforderungen an Änderungen
+
+Vor jeder Änderung müssen folgende Punkte definiert werden:
+
+* fachliches Ziel,
+* betroffene Eingabedaten,
+* erwartetes Ergebnis,
+* Sonderfälle,
+* Fehlerverhalten,
+* Abnahmekriterien.
+
+Die KI darf keine fachlichen Regeln erfinden. Unklare Anforderungen müssen als offene Punkte gekennzeichnet werden.
+
+Bestehende Berechnungslogik darf nicht verändert werden, wenn dies nicht ausdrücklich Bestandteil der Aufgabe ist.
+
+## 6. Codequalität
+
+* Funktionen sollen klein und eindeutig abgegrenzt sein.
+* Fachlogik, Datenzugriff, Validierung und Ausgabe werden getrennt implementiert.
+* Feldnamen, Einheiten und Vorzeichenlogik müssen eindeutig dokumentiert sein.
+* Geldbeträge, Mengen, Zeiten und Gewichte müssen mit definierten Datentypen und Rundungsregeln verarbeitet werden.
+* Fehler dürfen nicht stillschweigend ignoriert werden.
+* Unsichere Standardwerte oder automatische Fallbacks sind nicht zulässig.
+* Bei fehlenden Pflichtfeldern muss der Datensatz entweder kontrolliert abgewiesen oder eindeutig als fehlerhaft markiert werden.
+* Keine dynamische Ausführung von Eingabewerten über `eval`, `exec`, Shell-Kommandos oder vergleichbare Mechanismen.
+* SQL-Abfragen müssen parametrisiert sein.
+* Dateipfade und Dateinamen müssen validiert werden.
+
+## 7. Tests
+
+Jede fachliche Regel benötigt mindestens:
+
+* einen regulären Testfall,
+* einen Grenzfall,
+* einen fehlerhaften oder unvollständigen Testfall.
+
+Zusätzlich müssen Regressionstests für bereits bestätigte Ergebnisse bestehen.
+
+Vor einer produktiven Freigabe müssen mindestens folgende Prüfungen erfolgreich sein:
+
+* Unit-Tests,
+* Integrationstest mit definierten Testdaten,
+* Vergleich mit bekannten historischen Aufträgen,
+* Summen- und Mengenabstimmung,
+* Prüfung auf fehlende oder doppelte Datensätze,
+* Prüfung auf unerwartete Abweichungen,
+* statische Codeprüfung,
+* Prüfung verwendeter Abhängigkeiten.
+
+Tests dürfen nicht entfernt, abgeschwächt oder übersprungen werden, nur damit eine Änderung erfolgreich durchläuft.
+
+## 8. Plausibilitäts- und Kontrollsummen
+
+Jeder Programmlauf muss mindestens dokumentieren:
+
+* Anzahl eingelesener Datensätze,
+* Anzahl verarbeiteter Aufträge,
+* Anzahl ausgeschlossener Datensätze,
+* Anzahl fehlerhafter Datensätze,
+* Anzahl erzeugter Ergebnisse,
+* Summen der wesentlichen Mengen- und Wertfelder,
+* verwendete Programmversion,
+* Start- und Endzeit,
+* verwendete Konfiguration.
+
+Abweichungen gegenüber dem vorherigen Lauf müssen erkennbar sein.
+
+## 9. Fehlerbehandlung
+
+* Fehler müssen mit verständlicher Ursache protokolliert werden.
+* Bei kritischen Fehlern darf kein Ergebnis als vollständig freigegeben werden.
+* Teilverarbeitungen müssen eindeutig als unvollständig gekennzeichnet sein.
+* Ein Fehler in einem Auftrag darf nicht unbemerkt Ergebnisse anderer Aufträge verändern.
+* Wiederholte Programmläufe mit identischen Eingaben müssen identische Ergebnisse liefern.
+* Temporäre Dateien müssen kontrolliert behandelt und nach Fehlern aufgeräumt werden.
+
+## 10. Produktive Freigabe
+
+Eine Version darf nur produktiv eingesetzt werden, wenn:
+
+* alle automatisierten Tests erfolgreich sind,
+* die Ergebnisse mit Referenzfällen verglichen wurden,
+* die fachliche Änderung dokumentiert wurde,
+* ein Rollback auf die vorherige Version möglich ist,
+* die freigegebene Git-Version eindeutig feststeht.
+
+Die KI darf keine Version selbstständig produktiv setzen oder freigeben.
+
+## 11. KI-spezifische Anweisungen
+
+Bei jeder Änderung muss die KI:
+
+1. zuerst die bestehende Struktur und die betroffenen Dateien analysieren,
+2. Annahmen ausdrücklich nennen,
+3. nur die für die Aufgabe notwendigen Dateien ändern,
+4. keine bestehenden Schnittstellen ohne Begründung verändern,
+5. passende Tests erstellen oder anpassen,
+6. bestehende Tests ausführen,
+7. das Testergebnis vollständig angeben,
+8. auf nicht getestete Bereiche hinweisen,
+9. Sicherheits- und Datenrisiken der Änderung nennen,
+10. einen verständlichen Änderungsüberblick liefern.
+
+Die KI darf nicht:
+
+* Testergebnisse erfinden,
+* behaupten, Code ausgeführt zu haben, wenn dies nicht erfolgt ist,
+* unbekannte Datenstrukturen vermuten und als Tatsache behandeln,
+* Sicherheitsprüfungen deaktivieren,
+* Zugangsdaten in Dateien schreiben,
+* produktive Daten verändern,
+* bestehende Fehler durch pauschales Abfangen von Ausnahmen verdecken,
+* fachliche Regeln ohne ausdrückliche Anforderung ändern.
+
+## 12. Sicherheitsgrundlage
+
+Der Entwicklungsprozess orientiert sich am NIST Secure Software Development Framework.
+
+Technische Sicherheitsanforderungen werden, soweit für die Anwendung relevant, aus dem OWASP Application Security Verification Standard abgeleitet.
+
+Vor der produktiven Einführung wird ein dokumentiertes Threat Model erstellt. Dieses enthält mindestens:
+
+* schützenswerte Daten und Funktionen,
+* Benutzer und Berechtigungen,
+* Datenquellen und Datenziele,
+* Vertrauensgrenzen,
+* mögliche Manipulationen,
+* Fehler- und Ausfallszenarien,
+* notwendige Gegenmaßnahmen.
+
