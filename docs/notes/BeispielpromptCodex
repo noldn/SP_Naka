@@ -1,0 +1,36 @@
+Aufgabe:
+Implementiere ausschließlich das interne Datenmodell für einen Auftrag.
+
+Vor der Änderung:
+1. Lies AGENTS.md.
+2. Lies docs/01_ZIELBILD.md.
+3. Lies docs/03_DATENQUELLEN.md.
+4. Analysiere die bestehende Projektstruktur.
+5. Nenne die Dateien, die geändert werden müssen.
+
+Umfang:
+- Order-Datenklasse
+- MaterialRequirement-Datenklasse
+- MaterialConsumption-Datenklasse
+- Validierung der Pflichtfelder
+
+Nicht im Umfang:
+- Datenbank
+- Benutzeroberfläche
+- QVD-Import
+- Machine Learning
+- Änderung anderer Module
+
+Abnahmekriterien:
+- ungültige Auftragsnummer wird abgelehnt
+- negative Sollmengen werden abgelehnt
+- mehrere Materialien je Auftrag sind möglich
+- Soll- und Ist-Buchungen bleiben getrennt
+- Unit-Tests für alle Fälle
+- bestehende Tests bleiben unverändert erfolgreich
+
+Abschluss:
+- Tests ausführen
+- geänderte Dateien auflisten
+- bekannte Einschränkungen dokumentieren
+- keine weiteren Funktionen implementieren
