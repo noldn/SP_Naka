@@ -12,3 +12,5 @@ Wesentliche Änderungen werden hier in umgekehrt chronologischer Reihenfolge erf
 - Strukturierte Dokumentation für Entscheidungen, Notizen, Daten und Intranet-Inhalte.
 - Ausfüllbare Mehrtabellen-Vorlage im Datenkatalog mit Feldern, Beziehungen,
   Qualitätsprüfungen und Regeln für optionale Rohwarenzuordnungen.
+- Lokale Vollprofilierung von neun CSV-Datenquellen in den Datenkatalog übernommen;
+  Schlüsselabdeckung, CSV-Brauchbarkeit und fachlich offene Definitionen dokumentiert.
