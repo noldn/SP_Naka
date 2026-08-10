@@ -73,8 +73,8 @@ Verarbeitung geeignet.
 | SRC-005 | `Fertigungsmaterial.csv` | `production_material_usage` | 151.520 | 8 | vermutlich ein Materialverbrauch je Auftrag/Artikel/Gruppe | Kandidat nicht eindeutig |
 | SRC-006 | `ProdZeiten.csv` | `production_time_entry` | 397.890 | 17 | vermutlich eine Produktionszeit-/Arbeitsgangmeldung | keine Ereignis-ID vorhanden |
 | SRC-007 | `MegenMeldung.csv` | `quantity_report` | 198.513 | 5 | vermutlich eine Mengenmeldung | `ZeitmeldungID` eindeutig |
-| SRC-008 | `KTRBuchungenKI.csv` | `cost_object_booking` | 13.787 | 8 | vermutlich eine Kostenträgerbuchung | keine eindeutige Buchungs-ID vorhanden |
-| SRC-009 | `Rechnungskontrollen.csv` | `invoice_control_item` | 9.480 | 12 | vermutlich eine Rechnungskontrollposition | kein eindeutiger Schlüssel bestätigt |
+| SRC-008 | `KTRBuchungenKI.csv` | `cost_object_booking` | 13.787 | 8 | Summierte Kostenträgerbuchungen von gewissen Kostenarten die nicht anderweitig erfasst wurden | Summierte Buchungen |
+| SRC-009 | `Rechnungskontrollen.csv` | `invoice_control_item` | 9.480 | 12 | Rechnungskontrollpositionen die für den Auftrag angeschafft werden, wie. Z.B. Werkzeuge oder Spezialmaterialien oder Fremdarbeit | kein eindeutiger Schlüssel bestätigt |
 
 ---
 
@@ -87,7 +87,6 @@ Verarbeitung geeignet.
 - **Zeitraum:** 2023-01-01 bis 2026-08-06
 - **Zeilen:** 38.794
 - **Eine Zeile entspricht:** technisch einer eindeutigen Kopfzeile;
-  **OFFEN:** fachlich bestätigen, ob dies exakt einem Auftrag entspricht.
 - **Eindeutige Schlüssel:** `BelegKopfKey`, `V_BelegKopf_Obj` und `BelegNummer`
 - **Bevorzugter logischer Schlüssel:** `BelegKopfKey` als `order_header_key`;
   **OFFEN:** fachlich bestätigen, welcher Schlüssel systemübergreifend stabil ist.
@@ -97,18 +96,18 @@ Verarbeitung geeignet.
 
 | Physisches Feld | Vorgeschlagener logischer Name | Beobachteter Typ/Vollständigkeit | Rolle und offene Definition |
 |---|---|---|---|
-| `BelegDatum` | `order_date` | Datum, 100 % befüllt | Auftrags-/Belegdatum plausibel; fachlich bestätigen |
-| `V_BelegKopf_Obj` | `order_header_object_id` | Text, eindeutig, vollständig | technischer Schlüssel; Abgrenzung zu `BelegKopfKey` offen |
-| `BelegKopfKey` | `order_header_key` | Text, eindeutig, vollständig | Primärschlüsselkandidat |
-| `Kunde Key` | `customer_key` | Text, vollständig | Fremdschlüssel zu noch fehlendem Kundenstamm vermutet |
-| `offen` | `is_open_code` | Ganzzahl, 2 Ausprägungen | **OFFEN:** Codewerte und Datentyp Boolean/Status definieren |
+| `BelegDatum` | `order_date` | Datum, 100 % befüllt | Belegdatum des auftrages/BEstelldatum des Kunden. Relevantes Datum für Auswertungen |
+| `V_BelegKopf_Obj` | `order_header_object_id` | Text, eindeutig, vollständig | technischer Schlüssel; ISt eindeutisger sChlüssel, wird aber aktuell nicht in anderen Tabellen verwendet |
+| `BelegKopfKey` | `order_header_key` | Text, eindeutig, vollständig | Primärschlüssel |
+| `Kunde Key` | `customer_key` | Text, vollständig | Fremdschlüssel zu noch fehlendem Kundenstamm  |
+| `offen` | `is_open_code` | Ganzzahl, 2 Ausprägungen | Boolean- auftrag arhiviertd und Abgeschlossen oder noch Offen |
 | `BelegNummer` | `order_number` | ziffernartige ID, eindeutig | fachliche Auftragsnummer; als Text importieren |
-| `Zusatztext` | `additional_text` | Text, vollständig | Freitext; Datenschutz und Analyseverwendung prüfen |
-| `X_ArtikelGruppe` | `article_group_code` | gemischte ID, 4,367 % leer | als Text importieren; Beziehung zum Artikelstamm offen |
-| `ArtikelGruppeBez` | `article_group_name` | Text, vollständig | Bezeichnung; 37 Ausprägungen beobachtet |
-| `Erlöse` | `revenue_amount` | Dezimalzahl, vollständig | **OFFEN:** Währung, Vorzeichen und Berechnungsquelle; 94 negative Werte |
-| `Kosten` | `cost_amount` | Dezimalzahl, vollständig | **OFFEN:** Währung und Kostenumfang; 5 negative Werte |
-| `Produktionsstatus` | `production_status` | Text, 2 Ausprägungen | Werteliste und Bedeutung offen |
+| `Zusatztext` | `additional_text` | Text, vollständig | Freitext; Auftrags/Projektbeschreibung |
+| `X_ArtikelGruppe` | `article_group_code` | gemischte ID, 4,367 % leer | als Text importieren; Artikelgruppe- Welche Produktkategorie soll Produziert werden |
+| `ArtikelGruppeBez` | `article_group_name` | Text, vollständig | Bezeichnung; 37 Ausprägungen beobachtet Artikelgruppe- Welche Produktkategorie soll Produziert werden |
+| `Erlöse` | `revenue_amount` | Dezimalzahl, vollständig | Berechnete Erlöse des Autrags in EUR; Tatsächliche erlöse + Erlöse die aufgrund des Bestands zu erwarten sind. Mögliche Gutschriften/Bonus sind inkludiert |
+| `Kosten` | `cost_amount` | Dezimalzahl, vollständig | Summe der osten lt. Nachkalkulation in EUR 5 negative Werte |
+| `Produktionsstatus` | `production_status` | Text, 2 Ausprägungen | Sollten nur Fertige oder Stornierte Aufträge sein- sind in der Produktion abgehsclossen, Diverse Leistungen können zukünftig noch anfallen, Versand, Lagerhaltung,.. |
 | `AuftragStatus` | `order_status_code` | Ganzzahl, 2 Ausprägungen | Werteliste und Abgrenzung zu `Status` offen |
 | `NakaOK` | `naka_ok_code` | Ganzzahl, 2 Ausprägungen | fachliche Prüflogik offen |
 | `NakaBem` | `naka_comment` | Text, 99,995 % leer | nur 2 befüllte Zeilen; Notwendigkeit und Vertraulichkeit prüfen |
