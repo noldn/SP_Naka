@@ -100,7 +100,7 @@ Verarbeitung geeignet.
 | `V_BelegKopf_Obj` | `order_header_object_id` | Text, eindeutig, vollständig | technischer Schlüssel; ISt eindeutisger sChlüssel, wird aber aktuell nicht in anderen Tabellen verwendet |
 | `BelegKopfKey` | `order_header_key` | Text, eindeutig, vollständig | Primärschlüssel |
 | `Kunde Key` | `customer_key` | Text, vollständig | Fremdschlüssel zu noch fehlendem Kundenstamm  |
-| `offen` | `is_open_code` | Ganzzahl, 2 Ausprägungen | Boolean- auftrag arhiviertd und Abgeschlossen oder noch Offen |
+| `offen` | `is_open_code` | Ganzzahl, 2 Ausprägungen | Boolean- auftrag archiviert und Abgeschlossen oder eben noch Offen |
 | `BelegNummer` | `order_number` | ziffernartige ID, eindeutig | fachliche Auftragsnummer; als Text importieren |
 | `Zusatztext` | `additional_text` | Text, vollständig | Freitext; Auftrags/Projektbeschreibung |
 | `X_ArtikelGruppe` | `article_group_code` | gemischte ID, 4,367 % leer | als Text importieren; Artikelgruppe- Welche Produktkategorie soll Produziert werden |
@@ -146,25 +146,24 @@ Verarbeitung geeignet.
 
 | Physisches Feld | Vorgeschlagener logischer Name | Beobachteter Typ/Vollständigkeit | Rolle und offene Definition |
 |---|---|---|---|
-| `Firma` | `company_code` | Ganzzahl, konstant | **OFFEN:** Bedeutung des Codes; für Mehrfirmenfähigkeit als Schlüsselteil vorsehen |
 | `Artikel Key` | `article_key` | Text, vollständig | Fremdschlüssel zu noch fehlendem Artikelstamm vermutet |
 | `BelegKopfKey` | `order_header_key` | Text, vollständig | FK zu `order_header`; nicht vollständig referenziell gedeckt |
 | `PositionsNr` | `sales_item_number` | numerisch, vollständig | Teil des eindeutigen zusammengesetzten Schlüssels; 4 Dezimaldarstellungen prüfen |
-| `offen` | `is_open_code` | Ganzzahl, 2 Ausprägungen | Codewerte offen |
-| `WertPosition` | `is_value_item_code` | Ganzzahl, 2 Ausprägungen | Bedeutung offen |
+| `offen` | `is_open_code` | Ganzzahl, 2 Ausprägungen | Boolean- Position archiviert und Abgeschlossen oder eben noch Offen |
+| `WertPosition` | `is_value_item_code` | Ganzzahl, 2 Ausprägungen | BWertposition wird direkt vererchnet, keine Bestände/LS |
 | `Artikel` | `article_number` | gemischte ID, vollständig | als Text importieren; führende Nullen erhalten |
-| `Menge` | `ordered_quantity` | Dezimalzahl, vollständig | **OFFEN:** Einheit und Bedeutung der 14.812 Nullwerte |
-| `gelieferte_Menge` | `delivered_quantity` | Dezimalzahl, vollständig | **OFFEN:** Einheit; 37.020 Nullwerte |
-| `Einzelpreis` | `unit_price` | Dezimalzahl, vollständig | **OFFEN:** Währung und Preisbasis; 4 negative Werte |
-| `EinzelpreismZuAbschl` | `unit_price_after_adjustment` | Dezimalzahl, vollständig | genaue Berechnungslogik/Abgrenzung zu `Einzelpreis` offen |
+| `Menge` | `ordered_quantity` | Dezimalzahl, vollständig | Bedarfsmenge in Stk |
+| `gelieferte_Menge` | `delivered_quantity` | Dezimalzahl, vollständig | Menge die bereits geliefert wurde |
+| `Einzelpreis` | `unit_price` | Dezimalzahl, vollständig | Einzelpreis  |
+| `EinzelpreismZuAbschl` | `unit_price_after_adjustment` | Dezimalzahl, vollständig | Mgliche zu und abschläge sind berücksichtigt |
 | `Zusatzkostentyp` | `additional_cost_type_code` | Ganzzahl, 4 Ausprägungen | Werteliste offen |
-| `KommissionsNr` | `commission_number` | ID, 13,634 % leer | Bedeutung und Beziehung zu `Komm Key` offen |
-| `Preiseinheitsfaktor` | `price_unit_factor` | positive Ganzzahl, vollständig | Einheit und Anwendung in Preisformeln offen |
+| `KommissionsNr` | `commission_number` | ID, 13,634 % leer | KommissionsNr meist Auftragsnummer- wenn kein Wert kann Artikel von anderen Aufträgen entnommen werden |
+| `Preiseinheitsfaktor` | `price_unit_factor` | positive Ganzzahl, vollständig | Einheit und Anwendung in Preisformeln; Meist per 1000 oder Per 1 |
 | `KundenArtikelNr` | `customer_article_number` | gemischte ID, 8,374 % leer | als Text importieren; Fremdschlüssel/Verwendung offen |
 | `GesamtNetto` | `total_net_amount` | Dezimalzahl, vollständig | **OFFEN:** Währung und Berechnung; 4 negative Werte |
 | `Stornierte_Menge` | `cancelled_quantity` | Dezimalzahl, vollständig | Vorzeichenlogik offen; 86 negative Werte |
 | `V_BelegPos_Obj` | `sales_item_object_id` | Text, eindeutig, vollständig | stabiler Einzel-Schlüsselkandidat |
-| `Muster` | `sample_code_or_text` | Text, vollständig | **OFFEN:** fachliche Bedeutung und mögliche Vertraulichkeit |
+| `Muster` | `sample_code_or_text` | Text, vollständig | KonstruktionsNummer- Kann zum Gruppieren von anderen Aufträgen/ARtikel verwendet werden |
 
 ### Qualitätsbefund
 
@@ -185,42 +184,34 @@ Verarbeitung geeignet.
 - **Zeitraum Anlage:** 2023-01-02 bis 2026-08-07
 - **Zeitraum Änderung:** 2023-01-09 bis 2026-08-08
 - **Zeilen:** 45.433
-- **Eine Zeile entspricht:** technisch einer eindeutigen Belegposition;
-  **OFFEN:** fachlich klären, ob dies eine geplante, bestellte, reservierte oder
-  gelieferte Rohwarenposition ist.
+- **Eine Zeile entspricht:** technisch einer eindeutigen Belegposition; dies sind die Bedarfsmengen der jeweiligen Rohware. Kann jedoch abweichen
 - **Eindeutige Schlüssel:** `BelegposKey`, `BelegposBelegArtKey`,
   `VertriebAuftrag_Pos`, `V_BelegPos_Obj` sowie
   (`BelegKopf Key`, `PositionsNr`)
 - **Beziehung zum Auftragskopf:** 42.704 von 45.433 Zeilen (93,993 %) passen;
   2.729 Zeilen beziehungsweise 1.271 Kopf-Schlüssel fehlen im Auftragskopf.
-- **Beziehung zu Vertriebspositionen:** weder `VertriebAuftrag_Pos` gegen
-  `V_BelegPos_Obj` noch die Kombination Kopf + Position liefert Treffer.
+- Keine Beziehung zu Vertriebspositionen nur zum Kopf
 - **Exakte doppelte Zeilen:** 0
 
 ### Felder
 
 | Physisches Feld | Vorgeschlagener logischer Name | Beobachteter Typ/Vollständigkeit | Rolle und offene Definition |
 |---|---|---|---|
-| `Firma` | `company_code` | Ganzzahl, konstant | Firmenkontext offen |
-| `Artikel Key` | `article_key` | Text, vollständig | Fremdschlüssel zu Artikelstamm vermutet |
+| `Artikel Key` | `article_key` | Text, vollständig | Fremdschlüssel zu Artikelstamm  |
 | `BelegKopf Key` | `order_header_key` | Text, vollständig | FK-Kandidat zum Auftragskopf; 6,007 % der Zeilen ohne Treffer |
-| `Komm Key` | `commission_key` | Text, vollständig | Beziehung zu `KommissionsNr` offen |
 | `BelegposKey` | `document_item_key` | Text, eindeutig | bevorzugter lokaler Primärschlüsselkandidat |
 | `BelegposBelegArtKey` | `document_item_type_key` | Text, eindeutig | Abgrenzung zu `BelegposKey` offen |
 | `VertriebAuftrag_Pos` | `sales_order_item_reference` | Text, eindeutig | kein direkter Treffer auf Vertriebspositionsschlüssel; Formatdefinition nötig |
-| `PositionsNr` | `raw_material_item_number` | numerisch, vollständig | 2 Dezimaldarstellungen; offenbar nicht Vertriebspositionsnummer |
+| `PositionsNr` | `raw_material_item_number` | numerisch, vollständig | 2 Dezimaldarstellungen; größer gleich 900 immer RW-Pos |
 | `BelegArt` | `document_type` | Text, konstant | Bedeutung/Filterwirkung offen |
-| `ReferenzNr` | `reference_number` | ziffernartige ID, vollständig | Beziehung zu `BelegNummer`/Auftrag offen |
+| `ReferenzNr` | `reference_number` | ziffernartige ID, vollständig | Eindeutiger Schlüssel in der RW-Pos |
 | `BelegNummer` | `order_number` | ziffernartige ID, vollständig | gleiche Abdeckung zum Auftragskopf wie Kopf-Key |
-| `offen` | `is_open_code` | Ganzzahl, 2 Ausprägungen | Werteliste offen |
-| `WertPosition` | `is_value_item_code` | Ganzzahl, 2 Ausprägungen | Werteliste offen |
+| `offen` | `is_open_code` | Ganzzahl, 2 Ausprägungen | Boolean- Position archiviert und Abgeschlossen oder eben noch Offen  |
 | `Artikel` | `article_number` | gemischte ID, vollständig | als Text importieren |
 | `Menge` | `ordered_quantity` | Dezimalzahl, vollständig | Einheit über Codefeld; 159 Nullwerte |
-| `gelieferte_Menge` | `delivered_quantity` | Dezimalzahl, vollständig | 1 negativer Wert; Storno-/Korrekturlogik offen |
+| `gelieferte_Menge` | `delivered_quantity` | Dezimalzahl, vollständig | 1 negativer Wert; menge die Abgebucht wurde- ist aber in SRC-004 detalierter |
 | `reservierte_Menge` | `reserved_quantity` | Dezimalzahl, vollständig, immer 0 | derzeit ohne Informationsgehalt; Exportdefinition prüfen |
 | `MengenEinheit` | `quantity_unit_code` | Ganzzahlcode, 5 Ausprägungen | zwingend Werteliste/Umrechnung bereitstellen |
-| `Zusatzkostentyp` | `additional_cost_type_code` | Ganzzahl, 3 Ausprägungen | Werteliste offen |
-| `Gesamtgewicht` | `total_weight` | Dezimalzahl, vollständig, immer 0 | derzeit ohne Informationsgehalt; Einheit/Export prüfen |
 | `Stornierte_Menge` | `cancelled_quantity` | Dezimalzahl, vollständig | 543 negative Werte; Vorzeichenregel offen |
 | `AenderungDatum` | `modified_date` | Datum, vollständig | Zeitanteil/Zeitzone offen |
 | `AnlageDatum` | `created_date` | Datum, vollständig | Zeitanteil/Zeitzone offen |
@@ -228,11 +219,10 @@ Verarbeitung geeignet.
 
 ### Qualitätsbefund
 
-- Die Datei ist positionsintern gut schlüsselbar, aber die fachliche Verbindung zur
-  Vertriebsposition ist nicht definiert.
+- Die Datei ist positionsintern gut schlüsselbar, Keine Verbindung zur
+  Vertriebsposition.
 - `reservierte_Menge` und `Gesamtgewicht` enthalten ausschließlich Nullwerte.
-- **OFFEN:** Verbindungsschlüssel oder Zuordnungsregel zwischen Rohwaren- und
-  Vertriebspositionen bereitstellen.
+- Verbindung zu Belekgopf bzw Rohwarenbuchungen, wobei Rohwarenbuchungen nicht zwingend eine Entsprechung in der Rohwarenpositionen finden muss
 
 ---
 
@@ -258,14 +248,13 @@ Verarbeitung geeignet.
 
 | Physisches Feld | Vorgeschlagener logischer Name | Beobachteter Typ/Vollständigkeit | Rolle und offene Definition |
 |---|---|---|---|
-| `Firma` | `company_code` | Ganzzahl, konstant | Firmenkontext offen |
 | `Artikel` | `article_number` | gemischte ID, vollständig | als Text importieren |
 | `Artikel Key` | `article_key` | Text, vollständig | Artikel-Fremdschlüsselkandidat |
 | `S_Artikel_Obj` | `article_object_id` | Text, vollständig | Abgrenzung zu `Artikel Key` offen |
 | `BelegNummer` | `order_number` | ziffernartige ID, vollständig | FK zum Auftragskopf bestätigt |
-| `BuchungsDatum` | `booking_date` | Datum, vollständig | ein Datum liegt nach dem aktuellen Analysestichtag; fachlich prüfen |
+| `BuchungsDatum` | `booking_date` | Datum, vollständig | ein Datum liegt nach dem aktuellen Analysestichtag; fachlich prüfen - Datum kann eingegeben werden- Fehler durch Mensch- wird normalerweise nicht korrigiert  |
 | `Menge` | `booked_quantity` | Dezimalzahl, vollständig | 55.114 negativ, 10.395 positiv; Vorzeichenlogik zwingend definieren |
-| `WertMat` | `material_value` | Dezimalzahl, vollständig | 53.835 negativ; Währung und Vorzeichenlogik offen |
+| `WertMat` | `material_value` | Dezimalzahl, vollständig | 53.835 negativ; immer in EUR |
 | `MengeKG` | `quantity_kg` | 100 % leer | derzeit unbrauchbar; Quelle/Exportdefinition prüfen |
 | `MengeBG` | `quantity_sheet` | 100 % leer | derzeit unbrauchbar; Quelle/Exportdefinition prüfen |
 
@@ -300,12 +289,12 @@ Verarbeitung geeignet.
 |---|---|---|---|
 | `Auftrag` | `order_number` | ziffernartige ID, vollständig | FK zum Auftragskopf bestätigt |
 | `Artikel` | `article_number` | gemischte ID, 1 leer | als Text importieren; Artikelquelle offen |
-| `Preis` | `material_price` | Dezimalzahl, 24,417 % leer | Währung, Preisbasis und Grund für Leerwerte offen |
+| `Preis` | `material_price` | Dezimalzahl, 24,417 % leer | immer per 1 und EUR|
 | `Gruppe` | `material_group_code` | gemischte ID, 1 leer | als Text importieren |
 | `Bezeichnung` | `material_description` | Text, 1 leer | Freitext/Bezeichnung |
 | `GruppeBezeichnung` | `material_group_name` | Text, vollständig | 16 Ausprägungen beobachtet |
 | `VerbrauchteMenge` | `consumed_quantity` | Dezimalzahl, vollständig | Einheit und Aggregationsgrad offen |
-| `Materialwert` | `material_value` | Dezimalzahl, vollständig | Währung/Berechnung offen; 37.467 Nullwerte |
+| `Materialwert` | `material_value` | Dezimalzahl, vollständig | EUR ; 37.467 Nullwerte |
 
 ### Qualitätsbefund
 
@@ -338,22 +327,22 @@ Verarbeitung geeignet.
 | Physisches Feld | Vorgeschlagener logischer Name | Beobachteter Typ/Vollständigkeit | Rolle und offene Definition |
 |---|---|---|---|
 | `Datum` | `entry_date` | Datum, 88 leer/ungültig | Pflichtfeldstatus und Behandlung fehlender Daten klären |
-| `Mehraufwand Id` | `additional_effort_id` | ID, 94,697 % leer | optionale Bedeutung/Beziehung offen |
+| `Mehraufwand Id` | `additional_effort_id` | ID, 94,697 % leer | Mögliche Störungen bzw. Mehraufwände die Leistung reduzieren können|
 | `Auftrag` | `order_number` | ziffernartige ID, vollständig | FK zum Auftragskopf bestätigt |
-| `Kosten` | `cost_amount` | numerisch, vollständig | Währung und Berechnung offen; 162.699 Nullwerte |
+| `Kosten` | `cost_amount` | numerisch, vollständig | immer EURO- Nullwerte sind Personenzeiten|
 | `Dauer` | `duration` | Dezimalzahl, vollständig | Einheit und Rundung offen |
 | `DauerMaschine` | `machine_duration` | Dezimalzahl, vollständig | Einheit und Abgrenzung offen |
-| `DauerMF` | `mf_duration` | Dezimalzahl, vollständig | Bedeutung von MF und Einheit offen |
+| `DauerMF` | `mf_duration` | Dezimalzahl, vollständig | Dauer des Maschinenführers- sollte Analgezeit/Maschinenstunden entsprechen |
 | `Menge` | `reported_quantity` | numerisch, vollständig | Einheit; 290.488 Nullwerte |
 | `Bogen` | `sheet_quantity` | numerisch, vollständig | Einheit/Bedeutung; 290.491 Nullwerte |
 | `Stück` | `piece_quantity` | numerisch, vollständig | Einheit/Bedeutung; 290.488 Nullwerte |
-| `ARVONR` | `operation_number` | Ganzzahl, vollständig | Arbeitsvorgangsnummer vermutet |
+| `ARVONR` | `operation_number` | Ganzzahl, vollständig | Arbeitsvorgangsnummer  |
 | `ARVOKurz` | `operation_short_name` | Text, vollständig | Kurzbezeichnung zum Arbeitsvorgang vermutet |
-| `KSTKurz` | `cost_center_short_name` | Text, 4,499 % leer | Kostenstellenbezug vermutet |
-| `KSTBezeichnung` | `cost_center_name` | Text, 4,499 % leer | Kostenstellenbezeichnung vermutet |
-| `KSTNrKurz` | `cost_center_short_number` | Text, 4,499 % leer | Kostenstellenschlüssel vermutet |
-| `Stufe` | `production_stage_code` | Text, 10,355 % leer | Werteliste offen |
-| `Stufe Bezeichnung` | `production_stage_name` | Text, 10,355 % leer | Bezeichnung zur Stufe vermutet |
+| `KSTKurz` | `cost_center_short_name` | Text, 4,499 % leer | Kostenstellenbezug  |
+| `KSTBezeichnung` | `cost_center_name` | Text, 4,499 % leer | Kostenstellenbezeichnung  |
+| `KSTNrKurz` | `cost_center_short_number` | Text, 4,499 % leer | Kostenstellenschlüssel  |
+| `Stufe` | `production_stage_code` | Text, 10,355 % leer | Werteliste Produktionsstufe als ID/Nr |
+| `Stufe Bezeichnung` | `production_stage_name` | Text, 10,355 % leer | Bezeichnung zur Stufe  |
 
 ### Qualitätsbefund
 
@@ -364,7 +353,7 @@ Verarbeitung geeignet.
 
 ---
 
-## SRC-007 – Mengenmeldungen
+## SRC-007 – Mengenmeldungen  ---- OFFEN AA
 
 ### Tabellenbeschreibung
 
@@ -422,11 +411,11 @@ Verarbeitung geeignet.
 | `TrKoArt` | `cost_type_code` | Ganzzahl, vollständig | 3 Ausprägungen; Beziehung zu Kostenart-Key offen |
 | `Betrag` | `amount` | Dezimalzahl, vollständig | Währung/Vorzeichen offen; 203 negative Werte |
 | `Menge` | `quantity` | Dezimalzahl, vollständig | Einheit/Vorzeichen offen; 68 negative Werte |
-| `BuchungsText` | `booking_text` | Text, 0,044 % leer | Freitext; Vertraulichkeit und Analyseverwendung prüfen |
+| `BuchungsText` | `booking_text` | Text, 0,044 % leer | Freitext; kann verwendet werden|
 
 ### Qualitätsbefund
 
-- **OFFEN:** Sind die 23 identischen Zeilen echte Mehrfachbuchungen oder Duplikate?
+- **OFFEN:** Sind die 23 identischen Zeilen echte Mehrfachbuchungen 
 - **OFFEN:** stabile Buchungs-ID und Kostenartenstamm bereitstellen.
 
 ---
@@ -452,13 +441,12 @@ Verarbeitung geeignet.
 
 | Physisches Feld | Vorgeschlagener logischer Name | Beobachteter Typ/Vollständigkeit | Rolle und offene Definition |
 |---|---|---|---|
-| `Firma` | `company_code` | Ganzzahl, konstant | Firmenkontext offen |
-| `ReferenzNr` | `reference_number` | ziffernartige ID, vollständig | nicht identisch zu `BelegNummer`; Bedeutung offen |
-| `BelegNummer` | `invoice_document_number` | ziffernartige ID, vollständig | Belegbedeutung offen; kein Auftrags-FK |
+| `ReferenzNr` | `reference_number` | ziffernartige ID, vollständig | nicht identisch zu `BelegNummer`; eindeutige Nummer |
+| `BelegNummer` | `invoice_document_number` | ziffernartige ID, vollständig | Belegbedeutung offen; Rechnungskontrollnummer |
 | `RechnungsDatum` | `invoice_date` | Datum, vollständig | Rechnungsdatum plausibel |
 | `GutschriftErzeugen` | `create_credit_note_code` | Ganzzahl, 2 Ausprägungen | Codewerte und Prozesswirkung offen |
 | `Lieferant Key` | `supplier_key` | Text, vollständig | Fremdschlüssel zu fehlendem Lieferantenstamm vermutet |
-| `Artikel Key` | `invoice_article_key` | Text, vollständig | offenbar anderer Schlüsselraum als Rohwarenartikel |
+| `Artikel Key` | `invoice_article_key` | Text, vollständig | anderer Nummernkreis wie Vertrieb |
 | `ArtikelGruppe` | `article_group_code` | gemischte ID, vollständig | als Text importieren; 24 Ausprägungen |
 | `Bezeichnung` | `description` | Text, vollständig | Freitext/Artikelbezeichnung |
 | `Menge` | `invoice_quantity` | Dezimalzahl, vollständig | Einheit/Vorzeichen offen; 145 negative Werte |
@@ -467,8 +455,7 @@ Verarbeitung geeignet.
 
 ### Qualitätsbefund
 
-- **OFFEN:** Sind 407 identische Zeilen Duplikate oder fachlich zulässige
-  Mehrfachpositionen? Ohne Positions-/Buchungs-ID ist dies nicht entscheidbar.
+- **OFFEN:** Sind 407 identische Zeilen Duplikate fachlich zulässige
 - `ReferenzNr` und `BelegNummer` sind in keiner Zeile identisch; beide Definitionen
   müssen bereitgestellt werden.
 - **OFFEN:** Negative Mengen/Werte als Gutschrift oder Storno bestätigen.
