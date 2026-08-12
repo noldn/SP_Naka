@@ -43,11 +43,18 @@ ohne diese automatisch auf GitHub zu übertragen.
 - Das GitHub-Repository `noldn/SP_Naka` ist privat.
 - Auch ein privates Repository ist kein freigegebener Speicher für echte Rohdaten,
   Zugangsdaten oder ungeprüfte vertrauliche Inhalte.
+- Die Analyse beginnt mit deterministischen Material- und Prozessregeln.
+- Quantitative Toleranzen und Clustering werden erst nach fachlicher Definition und
+  Validierung ergänzt.
+- Ergebnisse werden begründet je Auftrag ausgegeben; Abweichungen werden zur
+  manuellen Prüfung markiert.
+- Manuelles Feedback darf neue Regelvorschläge erzeugen, Regeln aber nicht ohne
+  fachliche Freigabe selbstständig verändern.
 
 ## Noch zu entscheiden
 
-- Welche Datenformate und Datenmengen werden verarbeitet?
-- Welche konkreten Analysen und KI-Funktionen werden benötigt?
 - Welche Vertraulichkeitsstufen gelten im Unternehmen?
-- Welche Programmiersprache und Benutzeroberfläche werden eingesetzt?
+- Welche quantitative Schwankungsbreite ist je Material, Stufe und Auftragsart normal?
+- Welche Merkmale und Clusterverfahren werden fachlich freigegeben?
+- Welche Weboberfläche und Betriebsumgebung werden eingesetzt?
 - Welche Inhalte dürfen später in welches Intranet übernommen werden?

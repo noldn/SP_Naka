@@ -3,8 +3,9 @@
 | Bereich | Zweck |
 |---|---|
 | `ARCHITEKTUR.md` | Technischer Aufbau und Datenfluss |
+| `ANALYSIS_PROCESS.md` | Phasen, Bewertungsprozess, Ergebnisse und Feedback |
 | `CHANGELOG.md` | Nachvollziehbare Änderungen am Projekt |
-| `data/` | Datenkatalog und Regeln zum Umgang mit Daten |
+| `data/` | Datenkatalog, statische Fachregeln und Regeln zum Umgang mit Daten |
 | `decisions/` | Dauerhafte Architektur- und Projektentscheidungen |
 | `notes/` | Git-fähige Arbeits-, Recherche- und Besprechungsnotizen |
 | `intranet/` | Für die spätere Veröffentlichung aufbereitete Inhalte |
