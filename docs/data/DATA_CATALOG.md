@@ -96,11 +96,11 @@ Verarbeitung geeignet.
 
 | Physisches Feld | Vorgeschlagener logischer Name | Beobachteter Typ/Vollständigkeit | Rolle und offene Definition |
 |---|---|---|---|
-| `BelegDatum` | `order_date` | Datum, 100 % befüllt | Belegdatum des auftrages/BEstelldatum des Kunden. Relevantes Datum für Auswertungen |
-| `V_BelegKopf_Obj` | `order_header_object_id` | Text, eindeutig, vollständig | technischer Schlüssel; ISt eindeutisger sChlüssel, wird aber aktuell nicht in anderen Tabellen verwendet |
+| `BelegDatum` | `order_date` | Datum, 100 % befüllt | Belegdatum des Auftrages/Bestelldatum des Kunden. Relevantes Datum für Auswertungen |
+| `V_BelegKopf_Obj` | `order_header_object_id` | Text, eindeutig, vollständig | technischer Schlüssel; Ist eindeutisger Schlüssel, wird aber aktuell nicht in anderen Tabellen verwendet |
 | `BelegKopfKey` | `order_header_key` | Text, eindeutig, vollständig | Primärschlüssel |
 | `Kunde Key` | `customer_key` | Text, vollständig | Fremdschlüssel zu noch fehlendem Kundenstamm  |
-| `offen` | `is_open_code` | Ganzzahl, 2 Ausprägungen | Boolean- auftrag archiviert und Abgeschlossen oder eben noch Offen |
+| `offen` | `is_open_code` | Ganzzahl, 2 Ausprägungen | Boolean- Auftrag archiviert und Abgeschlossen oder eben noch Offen |
 | `BelegNummer` | `order_number` | ziffernartige ID, eindeutig | fachliche Auftragsnummer; als Text importieren |
 | `Zusatztext` | `additional_text` | Text, vollständig | Freitext; Auftrags/Projektbeschreibung |
 | `X_ArtikelGruppe` | `article_group_code` | gemischte ID, 4,367 % leer | als Text importieren; Artikelgruppe- Welche Produktkategorie soll Produziert werden |
