@@ -1,0 +1,61 @@
+{
+  "version": "2026-08-12.2",
+  "rules": [
+    {
+      "id": "MAT-DRUCK-PLATTE",
+      "description": "Bei Stufe Drucken muss mindestens eine Druckplatte im Fertigungsmaterial vorhanden sein.",
+      "trigger_stages": ["DRUCK"],
+      "requirement": {
+        "type": "material_group_any",
+        "source": "Fertigungsmaterial.csv",
+        "values": ["Druckplatten"]
+      },
+      "acceptance_exception": {
+        "none_of_groups": ["Druckplatten", "Farben"],
+        "reason": "Keine Druckplatte und keine Farbe gebucht; fachlich freigegebene automatische Ausnahme."
+      },
+      "pass_reason": "Stufe Drucken vorhanden und Druckplatte im Fertigungsmaterial nachgewiesen.",
+      "fail_reason": "Stufe Drucken vorhanden, aber keine Druckplatte im Fertigungsmaterial nachgewiesen."
+    },
+    {
+      "id": "MAT-DRUCK-FARBE-LACK",
+      "description": "Bei Stufe Drucken muss mindestens Farbe oder Lack im Fertigungsmaterial vorhanden sein.",
+      "trigger_stages": ["DRUCK"],
+      "requirement": {
+        "type": "material_group_any",
+        "source": "Fertigungsmaterial.csv",
+        "values": ["Farben", "Lacke"]
+      },
+      "acceptance_exception": {
+        "none_of_groups": ["Druckplatten", "Farben"],
+        "reason": "Keine Druckplatte und keine Farbe gebucht; fachlich freigegebene automatische Ausnahme. Lack ist nicht zwingend."
+      },
+      "pass_reason": "Stufe Drucken vorhanden und Farbe oder Lack im Fertigungsmaterial nachgewiesen.",
+      "fail_reason": "Stufe Drucken vorhanden, aber weder Farbe noch Lack im Fertigungsmaterial nachgewiesen."
+    },
+    {
+      "id": "MAT-KLEB-AUFRICHT-WELLKARTON-VERBRAUCH",
+      "description": "Bei Kleben oder Aufrichten muss Wellkarton als verbrauchtes Fertigungsmaterial vorhanden sein.",
+      "trigger_stages": ["KLEBEN", "KLEB", "AUFRICHTEN", "AUFRICHT"],
+      "requirement": {
+        "type": "article_prefix",
+        "source": "Fertigungsmaterial.csv",
+        "values": ["94"]
+      },
+      "pass_reason": "Kleben/Aufrichten vorhanden und Wellkarton-Verbrauch mit Artikelpräfix 94 nachgewiesen.",
+      "fail_reason": "Kleben/Aufrichten vorhanden, aber kein Wellkarton-Verbrauch mit Artikelpräfix 94 nachgewiesen."
+    },
+    {
+      "id": "MAT-KLEB-AUFRICHT-WELLKARTON-BUCHUNG",
+      "description": "Bei Kleben oder Aufrichten muss eine Wellkarton-Rohwarenbuchung vorhanden sein.",
+      "trigger_stages": ["KLEBEN", "KLEB", "AUFRICHTEN", "AUFRICHT"],
+      "requirement": {
+        "type": "article_prefix",
+        "source": "RW_Buchungen.csv",
+        "values": ["94"]
+      },
+      "pass_reason": "Kleben/Aufrichten vorhanden und Wellkarton-Buchung mit Artikelpräfix 94 nachgewiesen.",
+      "fail_reason": "Kleben/Aufrichten vorhanden, aber keine Wellkarton-Buchung mit Artikelpräfix 94 nachgewiesen."
+    }
+  ]
+}

@@ -17,6 +17,7 @@ SP_Na/
 ├── tests/               Automatisierte Tests
 ├── docs/                Projektdokumentation
 ├── config/              Versionierbare Beispielkonfiguration
+├── run_analysis.sh      Einfacher Start der lokalen Auftragsprüfung
 ├── data/
 │   ├── README.md        Regeln für lokale Daten
 │   └── local/           Lokale Daten (nicht in GitHub)
@@ -39,6 +40,27 @@ Beispiel:
 ```bash
 cp .env.example .env
 ```
+
+Die erste statische Materialprüfung benötigt nur Python 3 und keine zusätzlichen
+Pakete. Sie wird im Projektordner gestartet mit:
+
+```bash
+./run_analysis.sh
+```
+
+Alternativ können Pfade direkt angegeben werden:
+
+```bash
+./run_analysis.sh --data-dir /lokaler/pfad/zu/den/daten \
+  --output-dir /lokaler/pfad/zu/den/ergebnissen
+```
+
+Der Datenpfad darf entweder direkt auf den CSV-Ordner oder auf den Elternordner
+mit `CSV_Original/` zeigen. Jeder Lauf erzeugt ein eigenes Verzeichnis mit
+Auftragsbeurteilungen, Regelresultaten, Datenqualitätsbefunden, manueller Prüfliste
+und Laufprotokoll.
+Details stehen in [docs/ANALYSIS_PROCESS.md](docs/ANALYSIS_PROCESS.md); die aktiven
+fachlichen Regeln in [docs/data/STATIC_RULES.md](docs/data/STATIC_RULES.md).
 
 ## Datenschutz und GitHub
 
