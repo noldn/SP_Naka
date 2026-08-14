@@ -50,6 +50,26 @@ def build_parser(project_root: Path) -> argparse.ArgumentParser:
     parser.add_argument("--data-dir", type=Path, default=default_data)
     parser.add_argument("--output-dir", type=Path, default=default_output)
     parser.add_argument("--rules", type=Path, default=project_root / "config" / "rules.json")
+    parser.add_argument(
+        "--reference-data-dir",
+        type=Path,
+        help="Historischer Referenzbestand für robuste Peer-Gruppen; Standard ist der Eingabebestand.",
+    )
+    parser.add_argument(
+        "--analysis-parameters",
+        type=Path,
+        default=project_root / "config" / "analysis_parameters.json",
+    )
+    parser.add_argument(
+        "--accepted-customers",
+        type=Path,
+        default=project_root / "data" / "local" / "master_data" / "accepted_negative_customers.csv",
+    )
+    parser.add_argument(
+        "--skip-performance",
+        action="store_true",
+        help="Nur die statischen Materialregeln ausführen.",
+    )
     parser.add_argument("--run-id", help="Optionale eindeutige Laufkennung.")
     return parser
 
@@ -58,7 +78,15 @@ def main(argv: list[str] | None = None) -> int:
     project_root = Path(__file__).resolve().parents[2]
     args = build_parser(project_root).parse_args(argv)
     try:
-        run_dir = run_analysis(args.data_dir, args.output_dir, args.rules, args.run_id)
+        run_dir = run_analysis(
+            args.data_dir,
+            args.output_dir,
+            args.rules,
+            args.run_id,
+            reference_data_dir=args.reference_data_dir,
+            analysis_parameters_path=None if args.skip_performance else args.analysis_parameters,
+            accepted_customers_path=args.accepted_customers,
+        )
     except AnalysisError as exc:
         print(f"FEHLER: {exc}", file=sys.stderr)
         return 2

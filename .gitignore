@@ -16,6 +16,10 @@ data/local/**
 output/
 reports/generated/
 
+# Lokales Übergabe-/Arbeitsverzeichnis mit internen Kennungen
+transfer/
+Transfer/
+
 # Vertrauliche oder ausschließlich lokale Projektnotizen
 docs/private/**
 !docs/private/.gitkeep

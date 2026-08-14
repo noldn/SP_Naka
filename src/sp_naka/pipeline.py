@@ -20,6 +20,13 @@ from .csv_io import (
 )
 from .errors import AnalysisError
 from .models import OrderAssessment, RuleResult
+from .performance import (
+    EXPECTED_RESULT_FIELDS,
+    PERFORMANCE_FIELDS,
+    PERFORMANCE_FILES,
+    analyze_performance,
+    performance_sources_available,
+)
 from .rules import evaluate_rule, load_rules, normalize, normalize_stage, rule_applies
 from .version import __version__
 
@@ -39,6 +46,11 @@ FEEDBACK_FIELDS = [
 ]
 DATA_QUALITY_FIELDS = [
     "source_file", "row_number", "issue_code", "field", "severity", "handling",
+]
+PERFORMANCE_FEEDBACK_FIELDS = [
+    "run_id", "order_number", "performance_status", "reason_codes",
+    "review_decision", "error_category", "review_comment", "reviewed_by",
+    "reviewed_at",
 ]
 
 
@@ -165,6 +177,9 @@ def run_analysis(
     output_root: Path,
     rules_path: Path,
     run_id: str | None = None,
+    reference_data_dir: Path | None = None,
+    analysis_parameters_path: Path | None = None,
+    accepted_customers_path: Path | None = None,
 ) -> Path:
     started = datetime.now(timezone.utc)
     source_dir = resolve_source_dir(data_dir)
@@ -196,19 +211,50 @@ def run_analysis(
         )
     assessments, rule_results = _assess(orders, stages, material_groups, articles, rules)
 
+    performance_results: list[dict[str, object]] = []
+    performance_summary: dict[str, object] | None = None
+    reference_dir: Path | None = None
+    if analysis_parameters_path is not None:
+        reference_dir = resolve_source_dir(reference_data_dir or source_dir)
+        if not performance_sources_available(source_dir):
+            missing = sorted(name for name in PERFORMANCE_FILES if not (source_dir / name).is_file())
+            raise AnalysisError(f"Performance-Auswertung: Quelldateien fehlen: {', '.join(missing)}")
+        if not performance_sources_available(reference_dir):
+            missing = sorted(name for name in PERFORMANCE_FILES if not (reference_dir / name).is_file())
+            raise AnalysisError(f"Performance-Referenz: Quelldateien fehlen: {', '.join(missing)}")
+        performance_results, performance_summary = analyze_performance(
+            reference_dir,
+            source_dir,
+            analysis_parameters_path,
+            accepted_customers_path or Path("__missing_master_data__"),
+            effective_run_id,
+        )
+
     deviations = [item for item in rule_results if item.status == "ABWEICHUNG"]
     completed = datetime.now(timezone.utc)
     status_counts = Counter(item.overall_status for item in assessments)
     rule_status_counts: dict[str, Counter[str]] = defaultdict(Counter)
     for item in rule_results:
         rule_status_counts[item.rule_id][item.status] += 1
+    used_source_names = set(REQUIRED_COLUMNS)
+    if performance_summary is not None:
+        used_source_names.update(PERFORMANCE_FILES)
     source_files = {
         file_name: {
-            "rows": row_counts[file_name],
+            "rows": row_counts.get(file_name) or sum(1 for _ in read_rows(source_dir, file_name)),
             "sha256": sha256_file(source_dir / file_name),
         }
-        for file_name in sorted(REQUIRED_COLUMNS)
+        for file_name in sorted(used_source_names)
     }
+    reference_files = None
+    if reference_dir is not None and reference_dir != source_dir:
+        reference_files = {
+            file_name: {
+                "rows": sum(1 for _ in read_rows(reference_dir, file_name)),
+                "sha256": sha256_file(reference_dir / file_name),
+            }
+            for file_name in sorted(PERFORMANCE_FILES)
+        }
     rules_bytes = rules_path.read_bytes()
     manifest = {
         "run_id": effective_run_id,
@@ -221,15 +267,33 @@ def run_analysis(
             "rules_file": str(rules_path.resolve()),
             "source_directory": str(source_dir),
             "output_directory": str(run_dir),
+            "performance_parameters_file": (
+                str(analysis_parameters_path.resolve()) if analysis_parameters_path else None
+            ),
+            "performance_reference_directory": str(reference_dir) if reference_dir else None,
+            "accepted_customers_file": (
+                str(accepted_customers_path.resolve()) if accepted_customers_path else None
+            ),
+            "performance_parameters_sha256": (
+                sha256_file(analysis_parameters_path) if analysis_parameters_path else None
+            ),
+            "accepted_customers_sha256": (
+                sha256_file(accepted_customers_path)
+                if accepted_customers_path and accepted_customers_path.is_file()
+                else None
+            ),
         },
         "control_totals": {
-            "input_rows": sum(row_counts.values()),
+            "input_rows": sum(item["rows"] for item in source_files.values()),
             "orders_read": len(orders),
             "orders_processed": len(assessments),
             "orders_excluded": 0,
             "invalid_records": len(data_quality_issues),
             "rule_results_created": len(rule_results),
             "manual_reviews_created": len(deviations),
+            "performance_reviews_created": sum(
+                1 for item in performance_results if item["manual_review_required"]
+            ),
             "order_status_counts": dict(sorted(status_counts.items())),
             "rule_status_counts": {
                 rule_id: dict(sorted(counts.items()))
@@ -237,6 +301,8 @@ def run_analysis(
             },
         },
         "source_files": source_files,
+        "reference_files": reference_files,
+        "performance_analysis": performance_summary,
         "result_status": "COMPLETED",
     }
     temporary_run_dir.mkdir(parents=True)
@@ -274,6 +340,47 @@ def run_analysis(
             DATA_QUALITY_FIELDS,
             data_quality_issues,
         )
+        if performance_results:
+            write_csv(
+                temporary_run_dir / "performance_assessments.csv",
+                PERFORMANCE_FIELDS,
+                performance_results,
+            )
+            write_csv(
+                temporary_run_dir / "performance_review_template.csv",
+                PERFORMANCE_FEEDBACK_FIELDS,
+                (
+                    {
+                        "run_id": effective_run_id,
+                        "order_number": item["order_number"],
+                        "performance_status": item["performance_status"],
+                        "reason_codes": item["reason_codes"],
+                        "review_decision": "",
+                        "error_category": "",
+                        "review_comment": "",
+                        "reviewed_by": "",
+                        "reviewed_at": "",
+                    }
+                    for item in performance_results
+                    if item["manual_review_required"]
+                ),
+            )
+            write_csv(
+                temporary_run_dir / "expected_results_template.csv",
+                EXPECTED_RESULT_FIELDS,
+                (
+                    {
+                        "order_number": item["order_number"],
+                        "expected_performance_status": "",
+                        "expected_rule_ids": "",
+                        "expected_reason_codes": "",
+                        "accepted_exception": "",
+                        "professional_explanation": "",
+                        "review_status": "",
+                    }
+                    for item in performance_results
+                ),
+            )
         write_json(temporary_run_dir / "run_manifest.json", manifest)
         temporary_run_dir.replace(run_dir)
     except Exception:

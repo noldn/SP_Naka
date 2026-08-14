@@ -1,0 +1,49 @@
+{
+  "version": "2026-08-14.2",
+  "performance": {
+    "target": "Auftragskopf.Erlöse - Auftragskopf.Kosten",
+    "comparison_metric": "margin_rate",
+    "minimum_peer_group_size": 5,
+    "robust_z_warning_threshold": 2.0,
+    "robust_z_threshold": 3.5,
+    "quantity_buckets": [1000, 5000, 10000, 50000],
+    "peer_group_fallback": [
+      "customer+identity+quantity_bucket",
+      "identity+quantity_bucket",
+      "product_group+quantity_bucket",
+      "global+quantity_bucket"
+    ]
+  },
+  "series_detection": {
+    "minimum_hours": 12,
+    "maximum_hours": 24,
+    "identity_priority": ["STANZFORM", "WM_MUSTER"],
+    "status": "HYPOTHESIS_ONLY"
+  },
+  "raw_material_quantity_check": {
+    "levels": [
+      {"minimum_ratio": 1.1, "status": "HINWEIS"},
+      {"minimum_ratio": 1.25, "status": "PRUEFEN"},
+      {"minimum_ratio": 1.5, "status": "KRITISCH"}
+    ],
+    "comparison": "abs(sum(RW_Buchungen.Menge)) / sum(positive RohwarenPos.Menge)",
+    "status": "REVIEW_CANDIDATE_ONLY"
+  },
+  "material_factors": {
+    "paper_cardboard_groups": ["Papier", "Karton"],
+    "rw_value_sign": "ABSOLUTE_NET_VALUE",
+    "article_cost_priority": ["RW_Buchungen.WertMat", "Fertigungsmaterial.Materialwert"],
+    "denominators": ["Auftragskopf.Erlöse", "Auftragskopf.Kosten"]
+  },
+  "article_identification": {
+    "construction_prefix": "WM",
+    "invoice_article_company_separator": "|",
+    "die_form_invoice_prefix": "EF",
+    "die_form_service_prefix": "WS",
+    "wellboard_prefix": "94"
+  },
+  "evidence_keywords": {
+    "print_approval": ["druckabstim", "druckabstimm"],
+    "handwork": ["hand"]
+  }
+}

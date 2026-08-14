@@ -108,7 +108,10 @@ class PipelineIntegrationTests(unittest.TestCase):
         feedback = read_csv(run_dir / "manual_review_template.csv")
         self.assertEqual(1, len(feedback))
         self.assertEqual("MAT-KLEB-AUFRICHT-WELLKARTON-BUCHUNG", feedback[0]["rule_id"])
-        self.assertTrue((run_dir / "rule_results.csv").is_file())
+        rule_results = read_csv(run_dir / "rule_results.csv")
+        self.assertFalse(
+            any("WELLKARTON-VERBRAUCH" in row["rule_id"] for row in rule_results)
+        )
         self.assertTrue((run_dir / "run_manifest.json").is_file())
 
     def test_missing_required_column_stops_run(self) -> None:

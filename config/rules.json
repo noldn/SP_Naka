@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-12.2",
+  "version": "2026-08-14.2",
   "rules": [
     {
       "id": "MAT-DRUCK-PLATTE",
@@ -12,6 +12,7 @@
       },
       "acceptance_exception": {
         "none_of_groups": ["Druckplatten", "Farben"],
+        "none_of_article_prefixes": ["MIX"],
         "reason": "Keine Druckplatte und keine Farbe gebucht; fachlich freigegebene automatische Ausnahme."
       },
       "pass_reason": "Stufe Drucken vorhanden und Druckplatte im Fertigungsmaterial nachgewiesen.",
@@ -19,31 +20,33 @@
     },
     {
       "id": "MAT-DRUCK-FARBE-LACK",
-      "description": "Bei Stufe Drucken muss mindestens Farbe oder Lack im Fertigungsmaterial vorhanden sein.",
+      "description": "Bei Stufe Drucken muss mindestens Farbe, ein MIX-Artikel oder Lack im Fertigungsmaterial vorhanden sein.",
       "trigger_stages": ["DRUCK"],
       "requirement": {
         "type": "material_group_any",
         "source": "Fertigungsmaterial.csv",
-        "values": ["Farben", "Lacke"]
+        "values": ["Farben", "Lacke"],
+        "article_prefixes": ["MIX"]
       },
       "acceptance_exception": {
         "none_of_groups": ["Druckplatten", "Farben"],
+        "none_of_article_prefixes": ["MIX"],
         "reason": "Keine Druckplatte und keine Farbe gebucht; fachlich freigegebene automatische Ausnahme. Lack ist nicht zwingend."
       },
-      "pass_reason": "Stufe Drucken vorhanden und Farbe oder Lack im Fertigungsmaterial nachgewiesen.",
-      "fail_reason": "Stufe Drucken vorhanden, aber weder Farbe noch Lack im Fertigungsmaterial nachgewiesen."
+      "pass_reason": "Stufe Drucken vorhanden und Farbe, MIX-Artikel oder Lack im Fertigungsmaterial nachgewiesen.",
+      "fail_reason": "Stufe Drucken vorhanden, aber weder Farbe, MIX-Artikel noch Lack im Fertigungsmaterial nachgewiesen."
     },
     {
-      "id": "MAT-KLEB-AUFRICHT-WELLKARTON-VERBRAUCH",
-      "description": "Bei Kleben oder Aufrichten muss Wellkarton als verbrauchtes Fertigungsmaterial vorhanden sein.",
-      "trigger_stages": ["KLEBEN", "KLEB", "AUFRICHTEN", "AUFRICHT"],
+      "id": "MAT-FENSTER-FOLIE",
+      "description": "Bei Stufe Fenstern muss Fensterfolie im Fertigungsmaterial vorhanden sein.",
+      "trigger_stages": ["FENSTER"],
       "requirement": {
-        "type": "article_prefix",
+        "type": "material_group_any",
         "source": "Fertigungsmaterial.csv",
-        "values": ["94"]
+        "values": ["Fensterfolien"]
       },
-      "pass_reason": "Kleben/Aufrichten vorhanden und Wellkarton-Verbrauch mit Artikelpräfix 94 nachgewiesen.",
-      "fail_reason": "Kleben/Aufrichten vorhanden, aber kein Wellkarton-Verbrauch mit Artikelpräfix 94 nachgewiesen."
+      "pass_reason": "Stufe Fenstern vorhanden und Fensterfolie im Fertigungsmaterial nachgewiesen.",
+      "fail_reason": "Stufe Fenstern vorhanden, aber keine Fensterfolie im Fertigungsmaterial nachgewiesen."
     },
     {
       "id": "MAT-KLEB-AUFRICHT-WELLKARTON-BUCHUNG",

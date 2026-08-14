@@ -26,3 +26,26 @@ Wesentliche Änderungen werden hier in umgekehrt chronologischer Reihenfolge erf
 - Druckregeln auf Version 2026-08-12.2 präzisiert: Lack bleibt optional;
   Druckaufträge ohne Druckplatte und ohne Farbe werden nachvollziehbar als
   automatische Ausnahme akzeptiert und nicht zur manuellen Prüfung gestellt.
+- Regelwerk auf Version 2026-08-14.1 erweitert: MIX-Artikel gelten als
+  Farbnachweis; Wellkarton wird bei Kleben/Aufrichten ausschließlich anhand der
+  übertragenen Rohwarenbuchungen geprüft, nicht anhand der vorgelagerten
+  BDE-Erfassung im Fertigungsmaterial.
+- Performanceanalyse Version 0.4.0 ergänzt: Zielgröße `Erlöse - Kosten`,
+  robuste hierarchische Peer-Gruppen, auflagenabhängige Referenzen, erklärbare
+  Evidenz für Preis, Zeit, Material, Mehraufwand, Druckabstimmung und Handarbeit.
+- Lokale Stammdatenstruktur für Auslastungskunden und Fehlerkategorien sowie eine
+  automatisch erzeugte Soll-Ergebnisvorlage für Testaufträge hinzugefügt.
+- Rohwaren-Mengenkandidat für nicht korrigierte Restpaletten und gekennzeichneten
+  Wellkarton-Kostenfallback aus Fertigungsmaterial eingeführt.
+- Regelwerk 2026-08-14.2: Stufe `FENSTER` erfordert Materialgruppe
+  `Fensterfolien`; geplante Handarbeit allein ist keine Negativbegründung.
+- Rohwarenfaktor in die Stufen Hinweis ab 1,10, Prüfen ab 1,25 und Kritisch ab
+  1,50 aufgeteilt sowie Papier-/Karton- und Gesamtmaterialfaktoren je Auftrag
+  ergänzt.
+- Lokale Browseroberfläche Version 0.5.0 mit proALPHA-orientierter Navigation,
+  Parametrierung, Standard-/Anlernprozess, täglicher Planung, Laufhistorie,
+  Auftragsdetails und kontrolliertem Feedback hinzugefügt.
+- Docker-Umgebung, lokale Startbefehle und Installationsskripte für macOS und
+  Windows ergänzt; Threat Model dokumentiert.
+- Generator für ein von Git ausgeschlossenes Transferpaket mit TODO,
+  Stammdatenlisten und drei vorbereiteten Testfällen hinzugefügt.

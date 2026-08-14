@@ -21,7 +21,7 @@ eine fachliche Begründung, Tests und eine neue Regelversionsnummer.
 
 Eine Abweichung ist ein Prüfhinweis, keine automatische fachliche Fehlerfreigabe.
 
-## Aktive Regeln – Version 2026-08-12.2
+## Aktive Regeln – Version 2026-08-14.2
 
 ### MAT-DRUCK-PLATTE
 
@@ -29,18 +29,23 @@ Eine Abweichung ist ein Prüfhinweis, keine automatische fachliche Fehlerfreigab
 - Erwartung: Materialgruppe `Druckplatten` in `Fertigungsmaterial.csv`.
 - Abweichung: Drucken ist vorhanden, aber keine Druckplatte wurde nachgewiesen.
 - Automatische Ausnahme: Wenn gleichzeitig weder `Druckplatten` noch `Farben`
-  vorhanden sind, wird die Regel als `AKZEPTIERTE_AUSNAHME` gewertet.
+  noch ein Artikel mit Präfix `MIX` vorhanden sind, wird die Regel als
+  `AKZEPTIERTE_AUSNAHME` gewertet.
 
 ### MAT-DRUCK-FARBE-LACK
 
 - Trigger: Stufe `DRUCK` in Planung oder Produktionszeiten.
-- Erwartung: mindestens eine der Materialgruppen `Farben` oder `Lacke`.
+- Erwartung: mindestens eine der Materialgruppen `Farben` oder `Lacke` oder ein
+  Artikel mit Präfix `MIX` in `Fertigungsmaterial.csv`.
+- MIX-Artikel werden über das Artikelpräfix erkannt, weil sie im aktuellen Export
+  technisch in der Gruppe `Fehler` stehen und über die Gruppenbezeichnung allein
+  nicht als Farbe erkennbar wären.
 - Lack-only-Aufträge erfüllen die Regel durch `Lacke`; Farbe ist nicht zusätzlich
   erforderlich.
-- Abweichung: weder Farbe noch Lack wurde nachgewiesen.
+- Abweichung: weder Farbe, MIX-Artikel noch Lack wurde nachgewiesen.
 - Automatische Ausnahme: Wenn gleichzeitig weder `Druckplatten` noch `Farben`
-  vorhanden sind, wird die Regel als `AKZEPTIERTE_AUSNAHME` gewertet. Das gilt
-  unabhängig davon, ob Lack vorhanden ist.
+  noch ein MIX-Artikel vorhanden sind, wird die Regel als
+  `AKZEPTIERTE_AUSNAHME` gewertet. Das gilt unabhängig davon, ob Lack vorhanden ist.
 - Die Regel prüft zunächst nur das Vorhandensein, nicht die Menge.
 
 ### Hinweis zu Papier- und ET-Aufträgen
@@ -51,21 +56,28 @@ Eine Abweichung ist ein Prüfhinweis, keine automatische fachliche Fehlerfreigab
 - Lack ist bei ET-Aufträgen nicht zwingend. Da die aktive Regel ohnehin Farbe
   **oder** Lack erwartet, ist dafür keine eigene Lack-Ausnahme notwendig.
 
-### MAT-KLEB-AUFRICHT-WELLKARTON-VERBRAUCH
+### MAT-FENSTER-FOLIE
 
-- Trigger: `KLEBEN`, `KLEB`, `AUFRICHTEN` oder `AUFRICHT` in Planung oder
-  Produktionszeiten.
-- Erwartung: ein Artikel mit Präfix `94` in `Fertigungsmaterial.csv`.
-- Das Präfix wird am Anfang der als Text eingelesenen Artikelnummer geprüft.
-- Abweichung: kein entsprechender Verbrauch vorhanden.
+- Trigger: Stufe `FENSTER` in Planung oder Produktionszeiten.
+- Erwartung: Materialgruppe `Fensterfolien` in `Fertigungsmaterial.csv`.
+- Abweichung: Fenstern ist vorhanden, aber keine Fensterfolie wurde nachgewiesen.
+- Heißpräge- und Kaltfolien erfüllen die Regel nicht automatisch.
+- Die Regel prüft zunächst nur das Vorhandensein, nicht Menge oder Wert.
+- Beobachtete Basis: 721 Planungs- und 3.325 Ist-Zeitzeilen mit Stufe `FENSTER`;
+  die Materialgruppe `Fensterfolien` kommt in 651 Fertigungsmaterialzeilen vor.
 
 ### MAT-KLEB-AUFRICHT-WELLKARTON-BUCHUNG
 
-- Trigger: wie bei der Verbrauchsregel.
+- Trigger: `KLEBEN`, `KLEB`, `AUFRICHTEN` oder `AUFRICHT` in Planung oder
+  Produktionszeiten.
 - Erwartung: ein Artikel mit Präfix `94` in `RW_Buchungen.csv`.
 - Abweichung: keine entsprechende Rohwarenbuchung vorhanden.
-- Verbrauch und Buchung sind absichtlich getrennte Regeln, damit die Ursache der
-  Abweichung sichtbar bleibt.
+- Der vorherige BDE-Eintrag in `Fertigungsmaterial.csv` ist nur ein vorgelagerter
+  Erfassungsschritt und wird nicht mehr als eigener Wellkarton-Nachweis bewertet.
+- Maßgeblich ist ausschließlich die übertragene Rohwarenbuchung.
+- Davon getrennt darf die Performanceauswertung bei noch fehlender RW-Buchung
+  einen Fertigungsmaterialwert als gekennzeichnete Kosten-Näherung verwenden.
+  Dieser Fallback erfüllt die statische Buchungsregel ausdrücklich nicht.
 
 ## Bewusste Grenzen der ersten Version
 

@@ -41,8 +41,8 @@ Beispiel:
 cp .env.example .env
 ```
 
-Die erste statische Materialprüfung benötigt nur Python 3 und keine zusätzlichen
-Pakete. Sie wird im Projektordner gestartet mit:
+Die statische Material- und robuste Performanceprüfung benötigt nur Python 3 und
+keine zusätzlichen Pakete. Sie wird im Projektordner gestartet mit:
 
 ```bash
 ./run_analysis.sh
@@ -55,12 +55,27 @@ Alternativ können Pfade direkt angegeben werden:
   --output-dir /lokaler/pfad/zu/den/ergebnissen
 ```
 
+Ein kleiner Bestand neuer oder bekannter Testaufträge wird gegen den historischen
+Gesamtbestand ausgewertet mit:
+
+```bash
+./run_analysis.sh \
+  --data-dir data/local/CSV_TestDataSet \
+  --reference-data-dir data/local/CSV_Original
+```
+
+Lokale Stammdaten werden einmalig aus den Vorlagen unter
+`config/master_data_templates/` nach `data/local/master_data/` übernommen. Echte
+Kundenkennungen und Fehlerkategorien bleiben dadurch von Git ausgeschlossen.
+
 Der Datenpfad darf entweder direkt auf den CSV-Ordner oder auf den Elternordner
 mit `CSV_Original/` zeigen. Jeder Lauf erzeugt ein eigenes Verzeichnis mit
 Auftragsbeurteilungen, Regelresultaten, Datenqualitätsbefunden, manueller Prüfliste
 und Laufprotokoll.
 Details stehen in [docs/ANALYSIS_PROCESS.md](docs/ANALYSIS_PROCESS.md); die aktiven
-fachlichen Regeln in [docs/data/STATIC_RULES.md](docs/data/STATIC_RULES.md).
+Materialregeln in [docs/data/STATIC_RULES.md](docs/data/STATIC_RULES.md) und die
+Performancebewertung in
+[docs/data/PERFORMANCE_RULES.md](docs/data/PERFORMANCE_RULES.md).
 
 ## Datenschutz und GitHub
 
@@ -81,6 +96,18 @@ git diff --staged
 
 Weitere technische Entscheidungen werden in [docs/ARCHITEKTUR.md](docs/ARCHITEKTUR.md)
 dokumentiert.
+
+## Browseroberfläche
+
+Die lokale Browseroberfläche startet ohne Zusatzpakete mit:
+
+```bash
+./run_web.sh
+```
+
+Alternativ steht eine abgeschottete Docker-Umgebung mit Desktop-Installern für
+macOS und Windows bereit. Bedienung und Sicherheitsgrenzen stehen in
+[docs/WEB_APP.md](docs/WEB_APP.md).
 
 ## Dokumentation und Notizen
 

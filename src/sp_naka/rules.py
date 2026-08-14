@@ -50,12 +50,22 @@ def load_rules(path: Path) -> tuple[str, list[Rule]]:
                 trigger_stages=trigger_stages,
                 requirement_type=requirement_type,
                 values=values,
+                article_prefixes=tuple(
+                    str(value).strip()
+                    for value in requirement.get("article_prefixes", [])
+                ),
                 source=source,
                 pass_reason=str(entry["pass_reason"]).strip(),
                 fail_reason=str(entry["fail_reason"]).strip(),
                 acceptance_exception_none_groups=tuple(
                     str(value).strip()
                     for value in entry.get("acceptance_exception", {}).get("none_of_groups", [])
+                ),
+                acceptance_exception_none_article_prefixes=tuple(
+                    str(value).strip()
+                    for value in entry.get("acceptance_exception", {}).get(
+                        "none_of_article_prefixes", []
+                    )
                 ),
                 acceptance_exception_reason=str(
                     entry.get("acceptance_exception", {}).get("reason", "")
@@ -72,9 +82,11 @@ def load_rules(path: Path) -> tuple[str, list[Rule]]:
             raise AnalysisError(f"{rule_id}: unbekannter Anforderungstyp {requirement_type}")
         if source not in ALLOWED_SOURCES:
             raise AnalysisError(f"{rule_id}: unzulässige Quelle {source}")
-        if bool(rule.acceptance_exception_none_groups) != bool(
-            rule.acceptance_exception_reason
-        ):
+        has_exception_condition = bool(
+            rule.acceptance_exception_none_groups
+            or rule.acceptance_exception_none_article_prefixes
+        )
+        if has_exception_condition != bool(rule.acceptance_exception_reason):
             raise AnalysisError(
                 f"{rule_id}: automatische Ausnahme benötigt Prüfwerte und Begründung."
             )
@@ -94,11 +106,20 @@ def evaluate_rule(
     material_groups: set[str],
     article_numbers_by_source: dict[str, set[str]],
 ) -> RuleResult:
-    if rule.acceptance_exception_none_groups:
+    if (
+        rule.acceptance_exception_none_groups
+        or rule.acceptance_exception_none_article_prefixes
+    ):
         exception_groups = {
             normalize(value) for value in rule.acceptance_exception_none_groups
         }
-        if not exception_groups.intersection(material_groups):
+        exception_articles = article_numbers_by_source.get(rule.source, set())
+        exception_has_article = any(
+            article.upper().startswith(prefix.upper())
+            for article in exception_articles
+            for prefix in rule.acceptance_exception_none_article_prefixes
+        )
+        if not exception_groups.intersection(material_groups) and not exception_has_article:
             return RuleResult(
                 order_number=order_number,
                 rule_id=rule.rule_id,
@@ -109,7 +130,17 @@ def evaluate_rule(
 
     if rule.requirement_type == "material_group_any":
         expected = {normalize(value) for value in rule.values}
-        evidence_count = len(expected.intersection(material_groups))
+        group_evidence_count = len(expected.intersection(material_groups))
+        articles = article_numbers_by_source.get(rule.source, set())
+        article_evidence_count = sum(
+            1
+            for article in articles
+            if any(
+                article.upper().startswith(prefix.upper())
+                for prefix in rule.article_prefixes
+            )
+        )
+        evidence_count = group_evidence_count + article_evidence_count
     elif rule.requirement_type == "article_prefix":
         articles = article_numbers_by_source.get(rule.source, set())
         evidence_count = sum(

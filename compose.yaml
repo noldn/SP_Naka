@@ -1,0 +1,18 @@
+services:
+  sp-naka:
+    build:
+      context: .
+    container_name: sp-naka
+    restart: unless-stopped
+    environment:
+      SP_NAKA_CONTAINER: "1"
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - ./data/local:/app/data/local
+      - ./output:/app/output
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m
+    security_opt:
+      - no-new-privileges:true

@@ -50,6 +50,11 @@ ohne diese automatisch auf GitHub zu übertragen.
   manuellen Prüfung markiert.
 - Manuelles Feedback darf neue Regelvorschläge erzeugen, Regeln aber nicht ohne
   fachliche Freigabe selbstständig verändern.
+- Die finanzielle Zielgröße ist `Auftragskopf.Erlöse - Auftragskopf.Kosten` aus
+  der bestehenden Nachkalkulation. Detailtabellen erklären und plausibilisieren
+  das Ergebnis; sie ersetzen die Nachkalkulation noch nicht.
+- Neue fertige Aufträge werden gegen einen historischen Referenzbestand in
+  robusten, fachlich gestaffelten Peer-Gruppen verglichen.
 
 ## Noch zu entscheiden
 
