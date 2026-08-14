@@ -4,6 +4,12 @@ Wesentliche Änderungen werden hier in umgekehrt chronologischer Reihenfolge erf
 
 ## Noch nicht veröffentlicht
 
+### Korrigiert
+
+- Ergebnisordner bleiben unter macOS im Finder sichtbar. Temporäre Laufordner
+  werden nicht mehr als Punkt-Ordner angelegt, und unsichtbare Laufkennungen
+  werden abgewiesen.
+
 ### Hinzugefügt
 
 - Grundstruktur für Code, Tests, Konfiguration und lokale Daten.

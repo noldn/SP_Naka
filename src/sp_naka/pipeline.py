@@ -188,11 +188,18 @@ def run_analysis(
     rules_version, rules = load_rules(rules_path)
 
     effective_run_id = run_id or started.strftime("%Y%m%dT%H%M%S.%fZ")
-    if not effective_run_id.replace("-", "").replace("_", "").replace(".", "").isalnum():
+    if (
+        effective_run_id.startswith(".")
+        or not effective_run_id.replace("-", "").replace("_", "").replace(".", "").isalnum()
+    ):
         raise AnalysisError("run_id darf nur Buchstaben, Zahlen, Punkt, Minus und Unterstrich enthalten.")
     resolved_output_root = output_root.expanduser().resolve()
     run_dir = resolved_output_root / effective_run_id
-    temporary_run_dir = resolved_output_root / f".tmp-{effective_run_id}"
+    # Unter macOS kann ein als Punkt-Ordner angelegtes Verzeichnis das
+    # Finder-Attribut "hidden" nach dem atomaren Umbenennen behalten. Der
+    # sichtbare Präfix verhindert das, ohne die atomare Veröffentlichung des
+    # fertigen Laufs zu verändern.
+    temporary_run_dir = resolved_output_root / f"tmp-{effective_run_id}"
     if run_dir.exists():
         raise AnalysisError(f"Ausgabelauf existiert bereits: {run_dir}")
     if temporary_run_dir.exists():

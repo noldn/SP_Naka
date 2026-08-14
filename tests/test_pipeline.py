@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -113,6 +114,12 @@ class PipelineIntegrationTests(unittest.TestCase):
             any("WELLKARTON-VERBRAUCH" in row["rule_id"] for row in rule_results)
         )
         self.assertTrue((run_dir / "run_manifest.json").is_file())
+        if hasattr(run_dir.stat(), "st_flags") and hasattr(stat, "UF_HIDDEN"):
+            self.assertEqual(0, run_dir.stat().st_flags & stat.UF_HIDDEN)
+
+    def test_hidden_run_id_is_rejected(self) -> None:
+        with self.assertRaisesRegex(AnalysisError, "run_id"):
+            run_analysis(self.data, self.output, RULES_PATH, run_id=".hidden")
 
     def test_missing_required_column_stops_run(self) -> None:
         write_csv(
