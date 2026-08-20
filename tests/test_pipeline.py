@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -63,7 +64,7 @@ class PipelineIntegrationTests(unittest.TestCase):
         )
         write_csv(
             self.data / "Fertigungsmaterial.csv",
-            ["Auftrag", "Artikel", "GruppeBezeichnung"],
+            ["Auftrag", "Artikel", "ArtikelGruppeBez"],
             [
                 ["100", "PL1", "Druckplatten"],
                 ["100", "LA1", "Lacke"],
@@ -108,8 +109,17 @@ class PipelineIntegrationTests(unittest.TestCase):
         feedback = read_csv(run_dir / "manual_review_template.csv")
         self.assertEqual(1, len(feedback))
         self.assertEqual("MAT-KLEB-AUFRICHT-WELLKARTON-BUCHUNG", feedback[0]["rule_id"])
-        self.assertTrue((run_dir / "rule_results.csv").is_file())
+        rule_results = read_csv(run_dir / "rule_results.csv")
+        self.assertFalse(
+            any("WELLKARTON-VERBRAUCH" in row["rule_id"] for row in rule_results)
+        )
         self.assertTrue((run_dir / "run_manifest.json").is_file())
+        if hasattr(run_dir.stat(), "st_flags") and hasattr(stat, "UF_HIDDEN"):
+            self.assertEqual(0, run_dir.stat().st_flags & stat.UF_HIDDEN)
+
+    def test_hidden_run_id_is_rejected(self) -> None:
+        with self.assertRaisesRegex(AnalysisError, "run_id"):
+            run_analysis(self.data, self.output, RULES_PATH, run_id=".hidden")
 
     def test_missing_required_column_stops_run(self) -> None:
         write_csv(
@@ -126,7 +136,7 @@ class PipelineIntegrationTests(unittest.TestCase):
     def test_empty_material_article_is_reported_and_not_silently_used(self) -> None:
         write_csv(
             self.data / "Fertigungsmaterial.csv",
-            ["Auftrag", "Artikel", "GruppeBezeichnung"],
+            ["Auftrag", "Artikel", "ArtikelGruppeBez"],
             [["100", "", "Druckplatten"], ["100", "LA1", "Lacke"]],
         )
 

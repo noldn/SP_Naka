@@ -15,7 +15,9 @@ class Rule:
     source: str
     pass_reason: str
     fail_reason: str
+    article_prefixes: tuple[str, ...] = ()
     acceptance_exception_none_groups: tuple[str, ...] = ()
+    acceptance_exception_none_article_prefixes: tuple[str, ...] = ()
     acceptance_exception_reason: str = ""
 
 

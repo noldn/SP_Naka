@@ -28,6 +28,7 @@ lokale CSV-Originale (nur lesend)
   -> Schema- und Schlüsselvalidierung
   -> Zusammenführung je Auftrag
   -> versionierte statische Regeln
+  -> robuste, hierarchische Peer-Gruppen aus historischem Referenzbestand
   -> getrennte lokale Ergebnisdateien
   -> manuelle Prüfung und kontrolliertes Feedback
 ```
@@ -41,8 +42,10 @@ Jeder Lauf verwendet ein neues Verzeichnis. Erst nachdem alle Ergebnisdateien un
 das Laufprotokoll geschrieben wurden, wird der Lauf atomar als vollständig
 bereitgestellt. Ein abgebrochener Lauf darf nicht als freigegebenes Ergebnis gelten.
 
-Die Analysefunktion ist von der Bedienoberfläche getrennt. Eine spätere
-Weboberfläche soll dieselbe Pipeline aufrufen und keine zweite Fachlogik erhalten.
+Die Analysefunktion ist von der Bedienoberfläche getrennt. Die Weboberfläche
+ruft dieselbe Pipeline auf und enthält keine zweite Fachlogik. Die erste lokale
+Version erfüllt diese Vorgabe: Sie ruft `run_analysis`
+direkt auf und speichert nur lokale Bedienparameter und Feedback.
 
 ## Sicherheitsregeln
 
@@ -58,11 +61,20 @@ Weboberfläche soll dieselbe Pipeline aufrufen und keine zweite Fachlogik erhalt
 - Bedienung: Kommandozeile über `run_analysis.sh`.
 - Eingabe: dokumentierte lokale CSV-Dateien.
 - Ausgabe: getrennte lokale CSV-/JSON-Dateien je Lauf.
-- Fachlogik: statische Materialregeln vor quantitativer Analyse und Clustering.
+- Fachlogik: statische Materialregeln vor quantitativer Analyse; erste erklärbare
+  Peer-Gruppen als Vorstufe zu weiterem Clustering.
+
+## Webbetrieb der ersten Version
+
+- Python-Standardbibliothek ohne zusätzliche Webabhängigkeiten.
+- Lokal direkt oder in einem gehärteten Docker-Container.
+- Bindung nur an `127.0.0.1`; kein Mehrbenutzer- oder Internetbetrieb.
+- Persistente Daten ausschließlich in `data/local/` und `output/`.
+- Integrierte tägliche Planung, solange die Anwendung läuft.
 
 ## Noch festzulegen
 
-- Web-Framework, Authentifizierung und Betriebsumgebung
+- Authentifizierung und freigegebene Betriebsumgebung für einen Mehrbenutzerbetrieb
 - fachliche Toleranzen für Mengen, Zeiten, Kosten und Leistungen
 - Merkmale und Validierungsmethode für Clustering
 - Deployment- und Release-Strategie

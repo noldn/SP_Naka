@@ -55,6 +55,10 @@ diese kleinen Testausschnitte ist noch nicht bestätigt.
   über eine dokumentierte Mapping-Schicht auf stabile logische Namen abbilden.
 - Quelldateien ausschließlich lesend öffnen und niemals normalisieren oder
   überschreiben. Bereinigte Daten gehören in eine getrennte Staging-Schicht.
+- Für alle Tabellen mit Artikeln soll der Export zukünftig einen stabilen
+  Artikelgruppenschlüssel und eine Gruppenbezeichnung enthalten. Bis dahin sind
+  Materialfaktoren, die Gruppen wie Papier/Karton abgrenzen, nur teilweise
+  vollständig.
 
 ## Übergreifende offene Angaben
 
@@ -181,7 +185,7 @@ diese kleinen Testausschnitte ist noch nicht bestätigt.
 | `GesamtNetto` | `total_net_amount` | Dezimalzahl, vollständig | **OFFEN:** Währung und Berechnung; 2 negative Werte |
 | `Stornierte_Menge` | `cancelled_quantity` | Dezimalzahl, vollständig | Vorzeichenlogik offen; 86 negative Werte |
 | `V_BelegPos_Obj` | `sales_item_object_id` | Text, eindeutig, vollständig | stabiler Einzel-Schlüsselkandidat |
-| `Muster` | `sample_code_or_text` | Text, vollständig | KonstruktionsNummer- Kann zum Gruppieren von anderen Aufträgen/ARtikel verwendet werden |
+| `Muster` | `construction_code` | Text, vollständig | Konstruktionsnummer; Werte mit Präfix `WM` werden für Peer-Gruppen verwendet, wenn keine eindeutige Stanzform vorliegt |
 
 ### Qualitätsbefund
 
@@ -315,6 +319,9 @@ diese kleinen Testausschnitte ist noch nicht bestätigt.
 ### Qualitätsbefund
 
 - Auftrag ist vollständig referenziell gedeckt.
+- Für Wellkarton ist `Fertigungsmaterial.csv` die vorgelagerte BDE-Erfassung.
+  Maßgeblicher Nachweis für die statische Prüfung ist erst die anschließend
+  übertragene Buchung in `RW_Buchungen.csv`.
 - Nur 11,146 % der Kombinationen Auftrag + Artikel finden sich exakt in
   `RW_Buchungen.csv`, nur 8,499 % in `RohwarenPos.csv`.
 - **OFFEN:** Sind Artikelnummern unterschiedlich formatiert, stammen sie aus
@@ -482,7 +489,7 @@ diese kleinen Testausschnitte ist noch nicht bestätigt.
 | `RechnungsDatum` | `invoice_date` | Datum, vollständig | Rechnungsdatum plausibel |
 | `GutschriftErzeugen` | `create_credit_note_code` | Ganzzahl, 2 Ausprägungen | Codewerte und Prozesswirkung offen |
 | `Lieferant Key` | `supplier_key` | Text, vollständig | Fremdschlüssel zu fehlendem Lieferantenstamm vermutet |
-| `Artikel Key` | `invoice_article_key` | Text, vollständig | anderer Nummernkreis wie Vertrieb |
+| `Artikel Key` | `invoice_article_key` | Text, vollständig | Aufbau: Firmenschlüssel, Trenner `|`, danach Artikel; Artikelpräfix `WS` kennzeichnet WS-Leistungen, `EF` Stanzformartikel |
 | `ArtikelGruppe` | `article_group_code` | gemischte ID, vollständig | als Text importieren; 24 Ausprägungen |
 | `Bezeichnung` | `description` | Text, vollständig | Freitext/Artikelbezeichnung |
 | `Menge` | `invoice_quantity` | Dezimalzahl, vollständig | Einheit/Vorzeichen offen; 145 negative Werte |

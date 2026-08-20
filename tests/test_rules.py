@@ -7,6 +7,26 @@ from sp_naka.rules import evaluate_rule, rule_applies
 
 
 class RuleEvaluationTests(unittest.TestCase):
+    def test_window_stage_requires_window_film(self) -> None:
+        rule = Rule(
+            rule_id="FENSTER-FOLIE",
+            description="",
+            trigger_stages=frozenset({"FENSTER"}),
+            requirement_type="material_group_any",
+            values=("Fensterfolien",),
+            source="Fertigungsmaterial.csv",
+            pass_reason="ok",
+            fail_reason="fehlt",
+        )
+
+        present = evaluate_rule(rule, "1", {"fensterfolien"}, {})
+        missing = evaluate_rule(rule, "2", {"kaltfolien"}, {})
+
+        self.assertTrue(rule_applies(rule, {"FENSTER"}))
+        self.assertFalse(rule_applies(rule, {"DRUCK"}))
+        self.assertEqual("BESTANDEN", present.status)
+        self.assertEqual("ABWEICHUNG", missing.status)
+
     def test_lacquer_only_satisfies_color_or_lacquer_rule(self) -> None:
         rule = Rule(
             rule_id="DRUCK-FARBE-LACK",
@@ -60,6 +80,43 @@ class RuleEvaluationTests(unittest.TestCase):
 
         self.assertEqual("AKZEPTIERTE_AUSNAHME", result.status)
         self.assertEqual("fachlich akzeptiert", result.reason)
+
+    def test_mix_article_counts_as_color_and_prevents_empty_print_exception(self) -> None:
+        articles = {"Fertigungsmaterial.csv": {"MIX-001"}}
+        color_rule = Rule(
+            rule_id="DRUCK-FARBE",
+            description="",
+            trigger_stages=frozenset({"DRUCK"}),
+            requirement_type="material_group_any",
+            values=("Farben", "Lacke"),
+            source="Fertigungsmaterial.csv",
+            pass_reason="ok",
+            fail_reason="fehlt",
+            article_prefixes=("MIX",),
+            acceptance_exception_none_groups=("Druckplatten", "Farben"),
+            acceptance_exception_none_article_prefixes=("MIX",),
+            acceptance_exception_reason="fachlich akzeptiert",
+        )
+        plate_rule = Rule(
+            rule_id="DRUCK-PLATTE",
+            description="",
+            trigger_stages=frozenset({"DRUCK"}),
+            requirement_type="material_group_any",
+            values=("Druckplatten",),
+            source="Fertigungsmaterial.csv",
+            pass_reason="ok",
+            fail_reason="fehlt",
+            acceptance_exception_none_groups=("Druckplatten", "Farben"),
+            acceptance_exception_none_article_prefixes=("MIX",),
+            acceptance_exception_reason="fachlich akzeptiert",
+        )
+
+        self.assertEqual(
+            "BESTANDEN", evaluate_rule(color_rule, "1", {"fehler"}, articles).status
+        )
+        self.assertEqual(
+            "ABWEICHUNG", evaluate_rule(plate_rule, "1", {"fehler"}, articles).status
+        )
 
     def test_wellkarton_prefix_must_start_with_94(self) -> None:
         rule = Rule(

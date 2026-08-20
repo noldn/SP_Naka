@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+data/local
+output
+transfer
+Transfer
+__pycache__
+*.pyc
+.venv
+venv
