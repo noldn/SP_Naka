@@ -7,7 +7,12 @@ import unittest
 from pathlib import Path
 
 from sp_naka.errors import AnalysisError
-from sp_naka.performance import _quantity_bucket, analyze_performance, load_parameters
+from sp_naka.performance import (
+    _quantity_bucket,
+    analyze_performance,
+    load_parameters,
+    performance_sources_available,
+)
 
 
 def write_csv(path: Path, headers: list[str], rows: list[list[str]]) -> None:
@@ -157,6 +162,42 @@ class PerformanceTests(unittest.TestCase):
             analyze_performance(
                 self.reference, self.scoring, self.parameters, self.customers, "test"
             )
+
+    def test_reference_dataset_may_omit_raw_material_positions(self) -> None:
+        (self.reference / "RohwarenPos.csv").unlink()
+
+        self.assertTrue(performance_sources_available(self.reference))
+        rows, summary = analyze_performance(
+            self.reference, self.scoring, self.parameters, self.customers, "test"
+        )
+
+        self.assertEqual(1, len(rows))
+        self.assertEqual(5, summary["training_orders"])
+
+    def test_alternative_material_is_matched_by_group_after_exact_article(self) -> None:
+        write_csv(
+            self.scoring / "RohwarenPos.csv",
+            ["BelegNummer", "Artikel", "Menge", "ArtikelGruppeBez"],
+            [["S1", "PAPER-PLAN", 100, "Papier"], ["S1", "CARTON", 200, "Karton"]],
+        )
+        write_csv(
+            self.scoring / "RW_Buchungen.csv",
+            ["BelegNummer", "Artikel", "Menge", "WertMat", "ArtikelGruppeBez"],
+            [["S1", "PAPER-ALT", -150, -50, "Papier"], ["S1", "CARTON", -200, -20, "Karton"]],
+        )
+        write_csv(
+            self.scoring / "Fertigungsmaterial.csv",
+            ["Auftrag", "Artikel", "ArtikelGruppeBez", "Materialwert"],
+            [["S1", "PAPER-ALT", "Papier", 500]],
+        )
+
+        rows, _ = analyze_performance(
+            self.reference, self.scoring, self.parameters, self.customers, "test"
+        )
+
+        self.assertEqual(1.5, rows[0]["maximum_raw_material_quantity_ratio"])
+        self.assertEqual("ARTICLE_GROUP_ALTERNATIVE", rows[0]["raw_material_match_level"])
+        self.assertGreater(rows[0]["paper_cardboard_material_cost_eur"], 0)
 
 
 if __name__ == "__main__":

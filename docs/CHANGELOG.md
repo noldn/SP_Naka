@@ -6,11 +6,35 @@ Wesentliche Änderungen werden hier in umgekehrt chronologischer Reihenfolge erf
 
 ### Korrigiert
 
+- Produktionsmeldungen mit ausschließlich null gesetzten Kosten werden in der
+  Nachkalkulation als `0,00 € im Export` statt als nicht geliefert ausgewiesen.
+
 - Ergebnisordner bleiben unter macOS im Finder sichtbar. Temporäre Laufordner
   werden nicht mehr als Punkt-Ordner angelegt, und unsichtbare Laufkennungen
   werden abgewiesen.
+- Aktuelle Exporte mit `Fertigungsmaterial.ArtikelGruppeBez` werden zusätzlich
+  zur bisherigen Feldbezeichnung verarbeitet.
+- Rohwaren werden zuerst über den exakten Artikel und erst danach über die
+  Artikelgruppe als Alternativmaterial zugeordnet.
+- Ein historischer Referenzbestand bleibt auch ohne `RohwarenPos.csv` für die
+  robuste Performancebewertung verwendbar.
 
 ### Hinzugefügt
+
+- Die Nachkalkulation zeigt je Produktionsabteilung/-stufe die Leistung als
+  gemeldete Gesamtmenge geteilt durch die gemeldete Gesamtzeit.
+- Version 0.7.0: gemeinsame Bewertungs- und Klärungsmaske in der
+  Nachkalkulation für Test-, Trainings- und Standarddaten. Systembewertung,
+  fachliche Bewertung, Prüfstatus, Klärung und Prüfer werden getrennt und lokal
+  protokolliert, ohne Rohdaten oder Regeln zu verändern.
+- Historische Felder `NakaOK`, `NakaBem` und `Status` werden auch bei Aufträgen
+  aus dem Komplettbestand angezeigt; noch nicht berechnete Reason-Felder sind
+  ausdrücklich als solche gekennzeichnet.
+- Version 0.6.0: direkte Nachkalkulationsansicht mit Auftragsnummernsuche,
+  Auftragspositionen, Produktionszeiten, gelieferten Einzelkostenquellen,
+  offiziellen Ergebniswerten und ausdrücklich gekennzeichneten fehlenden
+  Zuschlägen/Lagerkosten.
+- Lokaler Windows-Start ohne Docker über `run_web_windows.ps1`.
 
 - Grundstruktur für Code, Tests, Konfiguration und lokale Daten.
 - Entwicklungsleitplanken in `AGENTS.md`.

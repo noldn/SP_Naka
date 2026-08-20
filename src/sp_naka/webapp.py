@@ -17,10 +17,22 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 from .csv_io import read_rows
 from .errors import AnalysisError
+from .nachkalkulation import load_order_calculation, number as parse_number
 from .pipeline import run_analysis
 
 
 MAX_POST_BYTES = 1024 * 1024
+
+CALCULATION_DATASETS = {"test", "training", "standard"}
+PROFESSIONAL_ASSESSMENTS = {
+    "OFFEN",
+    "IN_ORDNUNG",
+    "AUFFAELLIG_ABER_ERKLAERT",
+    "KORREKTUR_ERFORDERLICH",
+    "DATENFEHLER",
+    "AKZEPTIERTE_AUSNAHME",
+}
+REVIEW_STATUSES = {"OFFEN", "IN_PRUEFUNG", "ABGESCHLOSSEN"}
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
@@ -28,6 +40,13 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
         return []
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         return list(csv.DictReader(handle))
+
+
+def _read_semicolon_csv(path: Path) -> list[dict[str, str]]:
+    if not path.is_file():
+        return []
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        return list(csv.DictReader(handle, delimiter=";"))
 
 
 def _write_csv_replace(path: Path, fields: list[str], rows: list[dict[str, str]]) -> None:
@@ -62,6 +81,8 @@ class WebApplication:
         self.local_parameters_path = self.local_root / "analysis_parameters.json"
         self.customers_path = self.local_root / "master_data" / "accepted_negative_customers.csv"
         self.feedback_path = self.local_root / "feedback" / "performance_feedback.csv"
+        self.order_clarifications_path = self.local_root / "feedback" / "order_clarifications.csv"
+        self.test_cases_path = self.local_root / "TestDaten" / "Testset_3_Beispiele.csv"
         self.rules_path = self.root / "config" / "rules.json"
         self.csrf_token = secrets.token_urlsafe(32)
         self._state_lock = threading.Lock()
@@ -70,10 +91,14 @@ class WebApplication:
         threading.Thread(target=self._scheduler_loop, daemon=True).start()
 
     def _defaults(self) -> dict[str, object]:
+        supplied_training = self.local_root / "Komplett" / "CSV"
+        supplied_test = self.local_root / "TestDaten" / "CSV"
+        legacy_standard = self.local_root / "CSV_Original"
+        legacy_test = self.local_root / "CSV_TestDataSet"
         return {
-            "standard_data_dir": str(self.local_root / "CSV_Original"),
-            "training_data_dir": str(self.local_root / "CSV_TestDataSet"),
-            "reference_data_dir": str(self.local_root / "CSV_Original"),
+            "standard_data_dir": str(supplied_test if supplied_test.is_dir() else legacy_standard),
+            "training_data_dir": str(supplied_test if supplied_test.is_dir() else legacy_test),
+            "reference_data_dir": str(supplied_training if supplied_training.is_dir() else legacy_standard),
             "output_dir": str(self.root / "output" / "runs"),
             "schedule_enabled": False,
             "schedule_time": "02:00",
@@ -114,6 +139,15 @@ class WebApplication:
                 ["customer_key", "active_from", "active_until", "reason", "approved_by", "approved_at"],
                 [],
             )
+        if not self.order_clarifications_path.is_file():
+            _write_csv_replace(
+                self.order_clarifications_path,
+                [
+                    "dataset", "order_number", "professional_assessment", "review_status",
+                    "professional_clarification", "correction_required", "reviewed_by", "reviewed_at",
+                ],
+                [],
+            )
 
     def config(self) -> dict[str, object]:
         try:
@@ -146,6 +180,117 @@ class WebApplication:
 
     def output_root(self) -> Path:
         return Path(str(self.config()["output_dir"])).expanduser().resolve()
+
+    def calculation_data_dir(self, selection: str) -> Path:
+        field = {
+            "test": "training_data_dir",
+            "training": "reference_data_dir",
+            "standard": "standard_data_dir",
+        }.get(selection)
+        if field is None:
+            raise AnalysisError("Unbekannter Datenbestand.")
+        path = Path(str(self.config()[field])).expanduser().resolve()
+        if not path.is_dir():
+            raise AnalysisError(f"Datenverzeichnis nicht gefunden: {path}")
+        return path
+
+    def test_case(self, order_number: str) -> dict[str, str]:
+        record = next(
+            (
+                row
+                for row in _read_semicolon_csv(self.test_cases_path)
+                if (row.get("order_number") or "").strip() == order_number
+            ),
+            {},
+        )
+        if record and not (record.get("professional_explanation") or "").strip():
+            explanation = (record.get("current_explanation") or "").strip()
+            codes = (record.get("current_reason_codes") or "").strip()
+            if not explanation and codes and (" " in codes or "." in codes):
+                explanation = codes
+                record["current_reason_codes"] = ""
+            if explanation:
+                record["professional_explanation"] = explanation
+        return record
+
+    def order_clarification(self, order_number: str, dataset: str) -> dict[str, str]:
+        if dataset not in CALCULATION_DATASETS:
+            raise AnalysisError("Unbekannter Datenbestand.")
+        saved = next(
+            (
+                row
+                for row in _read_csv(self.order_clarifications_path)
+                if row.get("dataset") == dataset and row.get("order_number") == order_number
+            ),
+            {},
+        )
+        if saved:
+            return saved
+        test_case = self.test_case(order_number)
+        inherited_status = (test_case.get("review_status") or "OFFEN").strip().upper()
+        return {
+            "dataset": dataset,
+            "order_number": order_number,
+            "professional_assessment": "OFFEN",
+            "review_status": inherited_status if inherited_status in REVIEW_STATUSES else "OFFEN",
+            "professional_clarification": (test_case.get("professional_explanation") or "").strip(),
+            "correction_required": "NO",
+            "reviewed_by": "",
+            "reviewed_at": "",
+        }
+
+    def latest_order_assessment(self, order_number: str, source_dir: Path) -> dict[str, str]:
+        expected_source = source_dir.resolve()
+        for item in self.run_history(100):
+            manifest = item["manifest"]
+            configured_source = manifest.get("configuration", {}).get("source_directory", "")
+            if not configured_source:
+                continue
+            try:
+                if Path(str(configured_source)).expanduser().resolve() != expected_source:
+                    continue
+            except OSError:
+                continue
+            for row in _read_csv(item["dir"] / "performance_assessments.csv"):
+                if row.get("order_number") == order_number:
+                    return {**row, "run_id": item["dir"].name}
+        return {}
+
+    def save_order_clarification(self, form: dict[str, list[str]]) -> None:
+        fields = [
+            "dataset", "order_number", "professional_assessment", "review_status",
+            "professional_clarification", "correction_required", "reviewed_by", "reviewed_at",
+        ]
+        dataset = form.get("dataset", [""])[0].strip()
+        order = form.get("order_number", [""])[0].strip()
+        assessment = form.get("professional_assessment", [""])[0].strip()
+        status = form.get("review_status", [""])[0].strip()
+        clarification = form.get("professional_clarification", [""])[0].strip()
+        reviewed_by = form.get("reviewed_by", [""])[0].strip()
+        if dataset not in CALCULATION_DATASETS:
+            raise AnalysisError("Unbekannter Datenbestand.")
+        if assessment not in PROFESSIONAL_ASSESSMENTS:
+            raise AnalysisError("Bitte eine gültige fachliche Bewertung wählen.")
+        if status not in REVIEW_STATUSES:
+            raise AnalysisError("Bitte einen gültigen Prüfstatus wählen.")
+        if len(clarification) > 10000 or len(reviewed_by) > 200:
+            raise AnalysisError("Die fachliche Rückmeldung ist zu lang.")
+        load_order_calculation(self.calculation_data_dir(dataset), order)
+        rows = [
+            row for row in _read_csv(self.order_clarifications_path)
+            if not (row.get("dataset") == dataset and row.get("order_number") == order)
+        ]
+        rows.append({
+            "dataset": dataset,
+            "order_number": order,
+            "professional_assessment": assessment,
+            "review_status": status,
+            "professional_clarification": clarification,
+            "correction_required": "YES" if form.get("correction_required", [""])[0] == "on" else "NO",
+            "reviewed_by": reviewed_by,
+            "reviewed_at": datetime.now().isoformat(timespec="seconds"),
+        })
+        _write_csv_replace(self.order_clarifications_path, fields, rows)
 
     def run_history(self, limit: int = 10) -> list[dict[str, object]]:
         root = self.output_root()
@@ -330,6 +475,7 @@ class WebApplication:
 def _layout(title: str, active: str, content: str, state: dict[str, object]) -> str:
     menus = [
         ("dashboard", "/", "Übersicht"),
+        ("calculation", "/calculation", "Nachkalkulation"),
         ("runs", "/runs", "Laufhistorie"),
         ("orders", "/orders", "Auftragsbewertung"),
         ("review", "/review", "Prüfung & Feedback"),
@@ -365,6 +511,250 @@ def _formatted_number(value: str, kind: str) -> str:
     if kind == "ratio":
         return f"{number * 100:.2f}".replace(".", ",") + " %"
     return f"{number:.2f}".replace(".", ",")
+
+
+def _optional_number(value: object, kind: str = "number") -> str:
+    if value is None or value == "":
+        return "—"
+    return _formatted_number(str(value), kind)
+
+
+def _data_table(
+    rows: list[dict[str, object]] | list[dict[str, str]],
+    columns: tuple[tuple[str, str], ...],
+    empty: str = "Keine Daten vorhanden",
+) -> str:
+    head = "".join(f"<th>{html.escape(label)}</th>" for label, _ in columns)
+    body = "".join(
+        "<tr>"
+        + "".join(
+            f"<td>{html.escape(str(row.get(field, '') or ''))}</td>"
+            for _, field in columns
+        )
+        + "</tr>"
+        for row in rows
+    )
+    if not body:
+        body = f'<tr><td colspan="{len(columns)}">{html.escape(empty)}</td></tr>'
+    return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
+
+
+def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
+    order = params.get("order", [""])[0].strip()
+    selection = params.get("dataset", ["test"])[0]
+    if selection not in CALCULATION_DATASETS:
+        selection = "test"
+    options = (
+        ("test", "Testdaten"),
+        ("training", "Trainingsdaten (Komplett)"),
+        ("standard", "Standarddaten"),
+    )
+    option_html = "".join(
+        f'<option value="{key}" {"selected" if selection == key else ""}>{html.escape(label)}</option>'
+        for key, label in options
+    )
+    search = f"""<form method="get" class="calculation-search">
+<label>Auftragsnummer<input name="order" value="{html.escape(order)}" required autocomplete="off" placeholder="z. B. 123456"></label>
+<label>Datenbestand<select name="dataset">{option_html}</select></label>
+<button class="primary">Nachkalkulation anzeigen</button></form>"""
+    if not order:
+        return _card(
+            "Auftrag aufrufen",
+            search
+            + '<p class="hint">Die Ansicht liest die lokalen CSV-Dateien ausschließlich lesend. '
+            "Fehlende Kostenbestandteile werden gekennzeichnet und nicht geschätzt.</p>",
+        )
+    try:
+        calculation = load_order_calculation(app.calculation_data_dir(selection), order)
+    except AnalysisError as exc:
+        return _card("Auftrag aufrufen", search) + _card("Nicht gefunden", html.escape(str(exc)), "warning-card")
+
+    header = calculation["header"]
+    assert isinstance(header, dict)
+    revenue = calculation["revenue"]
+    cost = calculation["cost"]
+    result = calculation["result"]
+    margin_rate = calculation["margin_rate"]
+    result_class = "negative" if isinstance(result, (int, float)) and result < 0 else "positive"
+    identity = f"""<div class="order-heading"><div><span>Auftrag</span><strong>{html.escape(order)}</strong></div>
+<div><span>Beschreibung</span><strong>{html.escape(str(header.get('Zusatztext', '') or '—'))}</strong></div>
+<div><span>Kunde</span><strong>{html.escape(str(header.get('Kunde Key', '') or ''))} · {html.escape(str(header.get('KundeName', '') or ''))}</strong></div>
+<div><span>Produktgruppe</span><strong>{html.escape(str(header.get('X_ArtikelGruppe', '') or ''))} · {html.escape(str(header.get('ArtikelGruppeBez', '') or ''))}</strong></div></div>"""
+    summary = f"""<div class="calculation-summary">
+<div><span>Erlöse</span><strong>{html.escape(_optional_number(revenue, 'money'))}</strong></div>
+<div><span>Gesamtkosten</span><strong>{html.escape(_optional_number(cost, 'money'))}</strong></div>
+<div class="{result_class}"><span>Ergebnis</span><strong>{html.escape(_optional_number(result, 'money'))}</strong><small>{html.escape(_optional_number(margin_rate, 'ratio'))}</small></div>
+<div><span>Rekonstruierte Detailkosten*</span><strong>{html.escape(_optional_number(calculation['reconstructed_direct_costs'], 'money'))}</strong></div></div>
+<p class="hint">* Summe der gelieferten Material-, Rohwaren-, Rechnungskontroll- und Kostenträgerdaten; keine offizielle Einzelkostensumme.</p>"""
+
+    positions = _data_table(
+        calculation["positions"],
+        (
+            ("Pos.", "PositionsNr"), ("Artikel", "Artikel"),
+            ("Produktgruppe", "ArtikelGruppeBez"), ("Menge", "Menge"),
+            ("Geliefert", "gelieferte_Menge"), ("Offen", "offen"),
+            ("Netto", "GesamtNetto"), ("Muster", "Muster"),
+        ),
+    )
+    production_summary = calculation["production_summary"]
+    for row in production_summary:
+        row["duration_display"] = _optional_number(row.get("duration"))
+        row["machine_display"] = _optional_number(row.get("machine_duration"))
+        row["employee_display"] = _optional_number(row.get("employee_duration"))
+        row["quantity_display"] = _optional_number(row.get("quantity"))
+        row["performance_display"] = _optional_number(row.get("performance"))
+        row["cost_display"] = (
+            _optional_number(row.get("cost"), "money")
+            if calculation["production_detail_available"]
+            else "0,00 € im Export"
+        )
+    production = _data_table(
+        production_summary,
+        (
+            ("Stufe", "stage"), ("Meldungen", "entries"),
+            ("AZ", "duration_display"), ("MF", "machine_display"),
+            ("MH", "employee_display"), ("Menge", "quantity_display"),
+            ("Leistung (Menge/Gesamtzeit)", "performance_display"),
+            ("Kosten", "cost_display"), ("Mehraufwand", "extra_effort_entries"),
+        ),
+    )
+    production_details = _data_table(
+        calculation["production"],
+        (
+            ("Datum", "Datum"), ("Stufe", "Stufe"), ("Kostenstelle", "KSTKurz"),
+            ("Arbeitsvorgang", "ARVOKurz"), ("AZ", "Dauer"),
+            ("MF", "DauerMaschine"), ("MH", "DauerMF"),
+            ("Menge", "Menge"), ("Mehraufwand", "Mehraufwand Id"),
+        ),
+    )
+
+    individual_rows: list[dict[str, object]] = []
+    for row in calculation["manufacturing_material"]:
+        individual_rows.append({
+            "source": "Fertigungsmaterial", "date": "", "article": row.get("Artikel", ""),
+            "description": row.get("Bezeichnung", ""), "group": row.get("ArtikelGruppeBez", row.get("GruppeBezeichnung", "")),
+            "quantity": row.get("VerbrauchteMenge", ""), "unit": "", "value": _optional_number(row.get("Materialwert"), "money"),
+        })
+    for row in calculation["raw_bookings"]:
+        parsed_value = parse_number(row.get("WertMat"))
+        value = abs(parsed_value) if parsed_value is not None else None
+        individual_rows.append({
+            "source": "RW-Buchung", "date": row.get("BuchungsDatum", ""), "article": row.get("Artikel", ""),
+            "description": row.get("Sorte", ""), "group": row.get("ArtikelGruppeBez", ""),
+            "quantity": row.get("Menge", ""), "unit": row.get("Artikel EH", ""), "value": _optional_number(value, "money"),
+        })
+    for row in calculation["invoice_controls"]:
+        individual_rows.append({
+            "source": "Rechnungskontrolle", "date": row.get("RechnungsDatum", ""), "article": row.get("Artikel Key", ""),
+            "description": row.get("Bezeichnung", ""), "group": row.get("ArtikelGruppeBez", ""),
+            "quantity": row.get("Menge", ""), "unit": "", "value": _optional_number(row.get("WarenwertEUR"), "money"),
+        })
+    for row in calculation["cost_bookings"]:
+        individual_rows.append({
+            "source": "Kostenträger", "date": row.get("BuchungsDatum", ""), "article": row.get("TrKoArt", ""),
+            "description": row.get("BuchungsText", ""), "group": "", "quantity": row.get("Menge", ""),
+            "unit": "", "value": _optional_number(row.get("Betrag"), "money"),
+        })
+    individual = _data_table(
+        individual_rows,
+        (
+            ("Quelle", "source"), ("Datum", "date"), ("Artikel", "article"),
+            ("Bezeichnung", "description"), ("Gruppe", "group"),
+            ("Menge", "quantity"), ("EH", "unit"), ("Wert", "value"),
+        ),
+    )
+
+    totals = calculation["source_totals"]
+    source_rows = [
+        {"label": "Fertigungsmaterial", "value": _optional_number(totals["manufacturing_material"], "money")},
+        {"label": "RW-Buchungen", "value": _optional_number(totals["raw_bookings"], "money")},
+        {"label": "Rechnungskontrollen", "value": _optional_number(totals["invoice_controls"], "money")},
+        {"label": "Kostenträgerbuchungen", "value": _optional_number(totals["cost_bookings"], "money")},
+        {"label": "VV-Zuschlag fix/variabel", "value": "nicht geliefert"},
+        {"label": "Materialzuschlag fix/variabel", "value": "nicht geliefert"},
+        {"label": "Lagerkosten", "value": "nicht geliefert"},
+    ]
+    limitations = "".join(f"<li>{html.escape(str(value))}</li>" for value in calculation["limitations"])
+    cost_sources = _data_table(source_rows, (("Kostenquelle", "label"), ("Betrag/Status", "value"))) + f'<ul class="limitations">{limitations}</ul>'
+
+    test_case = app.test_case(order)
+    clarification = app.order_clarification(order, selection)
+    automated = app.latest_order_assessment(order, calculation["source_dir"])
+    official_assessment = (
+        "NEGATIVES ERGEBNIS" if isinstance(result, (int, float)) and result < 0
+        else "POSITIVES ERGEBNIS" if isinstance(result, (int, float)) and result > 0
+        else "ERGEBNIS NULL ODER UNBEKANNT"
+    )
+    assessment_options = (
+        ("OFFEN", "Offen"),
+        ("IN_ORDNUNG", "In Ordnung"),
+        ("AUFFAELLIG_ABER_ERKLAERT", "Auffällig, aber erklärt"),
+        ("KORREKTUR_ERFORDERLICH", "Korrektur erforderlich"),
+        ("DATENFEHLER", "Datenfehler"),
+        ("AKZEPTIERTE_AUSNAHME", "Akzeptierte Ausnahme"),
+    )
+    assessment_select = "".join(
+        f'<option value="{key}" {"selected" if clarification.get("professional_assessment") == key else ""}>{html.escape(label)}</option>'
+        for key, label in assessment_options
+    )
+    status_select = "".join(
+        f'<option value="{key}" {"selected" if clarification.get("review_status") == key else ""}>{html.escape(label)}</option>'
+        for key, label in (("OFFEN", "Offen"), ("IN_PRUEFUNG", "In Prüfung"), ("ABGESCHLOSSEN", "Abgeschlossen"))
+    )
+    automated_rows = (
+        ("Systembewertung", automated.get("performance_status") or official_assessment),
+        ("System-Prüfstatus", automated.get("reason_review_status") or "—"),
+        (
+            "Reason Codes",
+            automated.get("reason_codes")
+            or test_case.get("current_reason_codes")
+            or "Noch nicht berechnet – dieser Auftrag war bisher nur Teil des Referenzbestands.",
+        ),
+        (
+            "Reason Explanation",
+            automated.get("reason_explanation")
+            or test_case.get("current_explanation")
+            or "Noch nicht berechnet – keine passende Auftragsbewertung vorhanden.",
+        ),
+        ("Analyselauf", automated.get("run_id") or "Noch keine passende Analyse vorhanden"),
+        ("Historisches NakaOK", header.get("NakaOK") or "—"),
+        ("Historische NakaBemerkung", header.get("NakaBem") or "—"),
+        ("Historischer Status", header.get("Status") or "—"),
+        ("Erwartete Bewertung aus Testfall", test_case.get("expected_performance_status") or "—"),
+        ("Vorhandener Testfallstatus", test_case.get("review_status") or "—"),
+        ("Gespeicherte Fachbewertung", clarification.get("professional_assessment") or "OFFEN"),
+        ("Prüfstatus", clarification.get("review_status") or "OFFEN"),
+    )
+    automated_table = "".join(
+        f"<tr><th>{html.escape(label)}</th><td>{html.escape(str(value))}</td></tr>"
+        for label, value in automated_rows
+    )
+    saved_message = params.get("message", [""])[0]
+    message_html = f'<p class="success-message">{html.escape(saved_message)}</p>' if saved_message else ""
+    clarification_form = f"""<form method="post" action="/calculation/clarification" class="form-grid compact">
+<input type="hidden" name="csrf" value="{app.csrf_token}"><input type="hidden" name="dataset" value="{html.escape(selection)}"><input type="hidden" name="order_number" value="{html.escape(order)}">
+<label>Fachliche Bewertung<select name="professional_assessment" required>{assessment_select}</select></label>
+<label>Status<select name="review_status" required>{status_select}</select></label>
+<label class="full-width">Fachliche Klärung<textarea name="professional_clarification" rows="5" placeholder="Beobachtung, Ursache und fachliche Entscheidung dokumentieren">{html.escape(clarification.get('professional_clarification', ''))}</textarea></label>
+<label class="check"><input type="checkbox" name="correction_required" {"checked" if clarification.get("correction_required") == "YES" else ""}> Korrektur erforderlich</label>
+<label>Geprüft von<input name="reviewed_by" maxlength="200" value="{html.escape(clarification.get('reviewed_by', ''))}"></label>
+<button class="primary">Bewertung lokal speichern</button></form>"""
+    note = _card(
+        "Bewertung & fachliche Klärung",
+        message_html + '<div class="grid two"><div><h3>Analyse und vorhandene Hinweise</h3>'
+        + f'<table class="details">{automated_table}</table></div><div><h3>Fachliche Rückmeldung</h3>'
+        + clarification_form + "</div></div>",
+    )
+
+    return (
+        _card("Auftrag aufrufen", search)
+        + _card("Nachkalkulation", identity + summary, "calculation-sheet")
+        + note
+        + _card("Auftragspositionen", positions)
+        + _card("Produktionsleistungen/-zeiten", production + f'<details><summary>Einzelmeldungen anzeigen ({len(calculation["production"])})</summary>{production_details}</details>')
+        + _card("Einzelkosten aus gelieferten Quellen", individual)
+        + _card("Zusammenfassung der verfügbaren Kostenquellen", cost_sources)
+    )
 
 
 def _latest_run(app: WebApplication, requested: str = "") -> tuple[str, Path | None]:
@@ -562,6 +952,7 @@ def make_handler(app: WebApplication):
             state = app.run_state()
             routes = {
                 "/": ("dashboard", "Übersicht", lambda: _dashboard(app)),
+                "/calculation": ("calculation", "Nachkalkulation", lambda: _calculation_page(app, params)),
                 "/runs": ("runs", "Laufhistorie", lambda: _runs_page(app)),
                 "/orders": ("orders", "Auftragsbewertung", lambda: _orders_page(app, params)),
                 "/review": ("review", "Prüfung & Feedback", lambda: _orders_page(app, params, True)),
@@ -589,6 +980,13 @@ def make_handler(app: WebApplication):
                 elif self.path == "/feedback":
                     app.save_feedback(form)
                     self._redirect("/order?" + urlencode({"run": form["run_id"][0], "order": form["order_number"][0]}))
+                elif self.path == "/calculation/clarification":
+                    app.save_order_clarification(form)
+                    self._redirect("/calculation?" + urlencode({
+                        "dataset": form["dataset"][0],
+                        "order": form["order_number"][0],
+                        "message": "Bewertung gespeichert",
+                    }))
                 else:
                     self._send("Nicht gefunden", 404, "text/plain; charset=utf-8")
             except (AnalysisError, ValueError, OSError) as exc:

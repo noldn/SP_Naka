@@ -60,8 +60,8 @@ Gesamtbestand ausgewertet mit:
 
 ```bash
 ./run_analysis.sh \
-  --data-dir data/local/CSV_TestDataSet \
-  --reference-data-dir data/local/CSV_Original
+  --data-dir data/local/TestDaten/CSV \
+  --reference-data-dir data/local/Komplett/CSV
 ```
 
 Lokale Stammdaten werden einmalig aus den Vorlagen unter
@@ -104,6 +104,17 @@ Die lokale Browseroberfläche startet ohne Zusatzpakete mit:
 ```bash
 ./run_web.sh
 ```
+
+Unter Windows genügt im Projektordner:
+
+```powershell
+.\run_web_windows.ps1
+```
+
+Die Seite `http://127.0.0.1:8765/calculation` bietet eine direkte
+Auftragsnummernsuche. Sie zeigt die aus den lokalen CSV-Dateien rekonstruierbaren
+Auftragspositionen, Produktionszeiten und Kostenquellen. Nicht gelieferte
+Stundensätze, Lagerkosten und Zuschläge werden ausdrücklich als fehlend markiert.
 
 Alternativ steht eine abgeschottete Docker-Umgebung mit Desktop-Installern für
 macOS und Windows bereit. Bedienung und Sicherheitsgrenzen stehen in

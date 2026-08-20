@@ -64,7 +64,7 @@ class PipelineIntegrationTests(unittest.TestCase):
         )
         write_csv(
             self.data / "Fertigungsmaterial.csv",
-            ["Auftrag", "Artikel", "GruppeBezeichnung"],
+            ["Auftrag", "Artikel", "ArtikelGruppeBez"],
             [
                 ["100", "PL1", "Druckplatten"],
                 ["100", "LA1", "Lacke"],
@@ -136,7 +136,7 @@ class PipelineIntegrationTests(unittest.TestCase):
     def test_empty_material_article_is_reported_and_not_silently_used(self) -> None:
         write_csv(
             self.data / "Fertigungsmaterial.csv",
-            ["Auftrag", "Artikel", "GruppeBezeichnung"],
+            ["Auftrag", "Artikel", "ArtikelGruppeBez"],
             [["100", "", "Druckplatten"], ["100", "LA1", "Lacke"]],
         )
 

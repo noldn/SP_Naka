@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from sp_naka.errors import AnalysisError
-from sp_naka.webapp import WebApplication, _safe_run_dir
+from sp_naka.webapp import WebApplication, _calculation_page, _safe_run_dir
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -78,6 +78,72 @@ class WebApplicationTests(unittest.TestCase):
         run.mkdir()
         self.assertEqual(run.resolve(), _safe_run_dir(self.root / "output" / "runs", "valid-run"))
         self.assertIsNone(_safe_run_dir(self.root / "output" / "runs", "../outside"))
+
+    def test_free_text_accidentally_entered_as_reason_code_is_shown_as_explanation(self) -> None:
+        self.app.test_cases_path.parent.mkdir(parents=True, exist_ok=True)
+        self.app.test_cases_path.write_text(
+            "order_number;current_reason_codes;current_explanation;professional_explanation\n"
+            "100;Falsche Menge wurde vorgeschrieben.;;\n",
+            encoding="utf-8-sig",
+        )
+
+        record = self.app.test_case("100")
+
+        self.assertEqual("Falsche Menge wurde vorgeschrieben.", record["professional_explanation"])
+        self.assertEqual("", record["current_reason_codes"])
+
+    def _configure_order_source(self, order: str = "100") -> Path:
+        source = self.root / "training"
+        (source / "Auftragskopf.csv").write_text(
+            "BelegNummer,BelegKopfKey,Erlöse,Kosten,Zusatztext,NakaOK,NakaBem,Status\n"
+            f"{order},K-{order},100,120,Testauftrag,JA,Fachlich kommentiert,ERLEDIGT\n",
+            encoding="utf-8-sig",
+        )
+        config = self.app.config()
+        config["reference_data_dir"] = str(source)
+        self.app._save_config(config)
+        return source
+
+    def test_order_clarification_is_saved_per_dataset_and_can_be_updated(self) -> None:
+        self._configure_order_source()
+        base_form = {
+            "dataset": ["training"],
+            "order_number": ["100"],
+            "professional_assessment": ["AUFFAELLIG_ABER_ERKLAERT"],
+            "review_status": ["IN_PRUEFUNG"],
+            "professional_clarification": ["Sonderfall fachlich geprüft."],
+            "correction_required": ["on"],
+            "reviewed_by": ["Fachbereich"],
+        }
+
+        self.app.save_order_clarification(base_form)
+        base_form["review_status"] = ["ABGESCHLOSSEN"]
+        self.app.save_order_clarification(base_form)
+
+        record = self.app.order_clarification("100", "training")
+        self.assertEqual("ABGESCHLOSSEN", record["review_status"])
+        self.assertEqual("YES", record["correction_required"])
+        self.assertEqual(1, len(self.app.order_clarifications_path.read_text(encoding="utf-8-sig").splitlines()) - 1)
+
+    def test_invalid_clarification_status_is_rejected(self) -> None:
+        self._configure_order_source()
+        with self.assertRaisesRegex(AnalysisError, "Prüfstatus"):
+            self.app.save_order_clarification({
+                "dataset": ["training"], "order_number": ["100"],
+                "professional_assessment": ["OFFEN"], "review_status": ["FREIGEGEBEN"],
+            })
+
+    def test_review_section_is_visible_for_training_data_without_test_note(self) -> None:
+        self._configure_order_source()
+
+        page = _calculation_page(self.app, {"dataset": ["training"], "order": ["100"]})
+
+        self.assertIn("Bewertung &amp; fachliche Klärung", page)
+        self.assertIn("Fachliche Bewertung", page)
+        self.assertIn("NEGATIVES ERGEBNIS", page)
+        self.assertIn("Noch nicht berechnet", page)
+        self.assertIn("Fachlich kommentiert", page)
+        self.assertIn("ERLEDIGT", page)
 
 
 if __name__ == "__main__":

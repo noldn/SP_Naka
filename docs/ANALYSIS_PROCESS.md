@@ -61,6 +61,11 @@ Schutz der lokalen Daten und ein freigegebenes Betriebsmodell.
 Feedback aus manuellen Prüfungen wird zunächst als lokales Prüfprotokoll geführt.
 Automatische Änderungen an produktiven Regeln oder Quelldaten sind nicht zulässig.
 
+Auftragsbezogene Bewertungen und fachliche Klärungen werden unabhängig vom
+gewählten Datenbestand lokal protokolliert. Sie dienen als kuratierte Soll- und
+Validierungsinformation. Erst nach fachlicher Freigabe dürfen daraus geänderte
+Regeln oder ein aktualisierter Referenzbestand entstehen.
+
 Die lokale Browseroberfläche stellt Parametrierung, Standard- und Anlernprozess,
 Aufgabenplanung, Laufhistorie, Auftragsdetails und kontrolliertes Feedback bereit.
 Die Bedienung ist in `docs/WEB_APP.md` beschrieben.

@@ -23,8 +23,9 @@ from .models import OrderAssessment, RuleResult
 from .performance import (
     EXPECTED_RESULT_FIELDS,
     PERFORMANCE_FIELDS,
-    PERFORMANCE_FILES,
+    PERFORMANCE_REQUIRED_FILES,
     analyze_performance,
+    available_performance_files,
     performance_sources_available,
 )
 from .rules import evaluate_rule, load_rules, normalize, normalize_stage, rule_applies
@@ -224,10 +225,10 @@ def run_analysis(
     if analysis_parameters_path is not None:
         reference_dir = resolve_source_dir(reference_data_dir or source_dir)
         if not performance_sources_available(source_dir):
-            missing = sorted(name for name in PERFORMANCE_FILES if not (source_dir / name).is_file())
+            missing = sorted(name for name in PERFORMANCE_REQUIRED_FILES if not (source_dir / name).is_file())
             raise AnalysisError(f"Performance-Auswertung: Quelldateien fehlen: {', '.join(missing)}")
         if not performance_sources_available(reference_dir):
-            missing = sorted(name for name in PERFORMANCE_FILES if not (reference_dir / name).is_file())
+            missing = sorted(name for name in PERFORMANCE_REQUIRED_FILES if not (reference_dir / name).is_file())
             raise AnalysisError(f"Performance-Referenz: Quelldateien fehlen: {', '.join(missing)}")
         performance_results, performance_summary = analyze_performance(
             reference_dir,
@@ -245,7 +246,7 @@ def run_analysis(
         rule_status_counts[item.rule_id][item.status] += 1
     used_source_names = set(REQUIRED_COLUMNS)
     if performance_summary is not None:
-        used_source_names.update(PERFORMANCE_FILES)
+        used_source_names.update(available_performance_files(source_dir))
     source_files = {
         file_name: {
             "rows": row_counts.get(file_name) or sum(1 for _ in read_rows(source_dir, file_name)),
@@ -260,7 +261,7 @@ def run_analysis(
                 "rows": sum(1 for _ in read_rows(reference_dir, file_name)),
                 "sha256": sha256_file(reference_dir / file_name),
             }
-            for file_name in sorted(PERFORMANCE_FILES)
+            for file_name in sorted(available_performance_files(reference_dir))
         }
     rules_bytes = rules_path.read_bytes()
     manifest = {

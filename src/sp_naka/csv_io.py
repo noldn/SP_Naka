@@ -28,6 +28,21 @@ NONEMPTY_COLUMNS: dict[str, frozenset[str]] = {
     "RW_Buchungen.csv": frozenset({"BelegNummer", "Artikel"}),
 }
 
+COLUMN_ALIASES: dict[str, dict[str, tuple[str, ...]]] = {
+    "Fertigungsmaterial.csv": {
+        "GruppeBezeichnung": ("ArtikelGruppeBez",),
+    },
+}
+
+
+def _column_value(row: dict[str, str], file_name: str, field: str) -> str:
+    if field in row:
+        return row[field]
+    for alias in COLUMN_ALIASES.get(file_name, {}).get(field, ()):
+        if alias in row:
+            return row[alias]
+    return ""
+
 
 def resolve_source_dir(data_dir: Path) -> Path:
     """Akzeptiert entweder den Exportordner oder dessen Elternordner."""
@@ -64,7 +79,15 @@ def validate_sources(source_dir: Path) -> tuple[dict[str, int], list[dict[str, o
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
             reader = csv.DictReader(handle, delimiter=",", quotechar='"')
             headers = reader.fieldnames or []
-            missing = sorted(required.difference(headers))
+            missing = sorted(
+                field
+                for field in required
+                if field not in headers
+                and not any(
+                    alias in headers
+                    for alias in COLUMN_ALIASES.get(file_name, {}).get(field, ())
+                )
+            )
             if missing:
                 raise AnalysisError(
                     f"{file_name}: Pflichtfelder fehlen: {', '.join(missing)}"
@@ -76,7 +99,7 @@ def validate_sources(source_dir: Path) -> tuple[dict[str, int], list[dict[str, o
                     )
                 count += 1
                 for field in sorted(NONEMPTY_COLUMNS[file_name]):
-                    if not row[field].strip():
+                    if not _column_value(row, file_name, field).strip():
                         issues.append(
                             {
                                 "source_file": file_name,
@@ -110,7 +133,14 @@ def read_rows(source_dir: Path, file_name: str) -> Iterator[dict[str, str]]:
     with (source_dir / file_name).open(
         "r", encoding="utf-8-sig", newline=""
     ) as handle:
-        yield from csv.DictReader(handle, delimiter=",", quotechar='"')
+        for row in csv.DictReader(handle, delimiter=",", quotechar='"'):
+            for canonical, aliases in COLUMN_ALIASES.get(file_name, {}).items():
+                if canonical not in row:
+                    row[canonical] = next(
+                        (row[alias] for alias in aliases if alias in row),
+                        "",
+                    )
+            yield row
 
 
 def sha256_file(path: Path) -> str:

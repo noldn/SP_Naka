@@ -29,6 +29,7 @@ PERFORMANCE_FILES = {
     "RW_Buchungen.csv",
     "Rechnungskontrollen.csv",
 }
+PERFORMANCE_REQUIRED_FILES = PERFORMANCE_FILES - {"RohwarenPos.csv"}
 
 PERFORMANCE_FIELDS = [
     "run_id", "order_number", "performance_status", "absolute_result",
@@ -40,7 +41,7 @@ PERFORMANCE_FIELDS = [
     "print_approval_present", "first_observed_die_form", "ws_invoice_present",
     "wellboard_cost_source", "wellboard_net_value", "series_candidate",
     "series_color_overlap", "maximum_raw_material_quantity_ratio",
-    "raw_material_quantity_status", "paper_cardboard_material_cost_eur",
+    "raw_material_match_level", "raw_material_quantity_status", "paper_cardboard_material_cost_eur",
     "paper_cardboard_share_of_revenue", "paper_cardboard_share_of_cost",
     "total_material_cost_eur", "total_material_share_of_revenue",
     "total_material_share_of_cost", "limitations",
@@ -173,7 +174,11 @@ def _accepted_on(
 
 
 def performance_sources_available(source_dir: Path) -> bool:
-    return all((source_dir / name).is_file() for name in PERFORMANCE_FILES)
+    return all((source_dir / name).is_file() for name in PERFORMANCE_REQUIRED_FILES)
+
+
+def available_performance_files(source_dir: Path) -> set[str]:
+    return {name for name in PERFORMANCE_FILES if (source_dir / name).is_file()}
 
 
 def _load_features(source_dir: Path, parameters: dict[str, object]) -> dict[str, dict[str, object]]:
@@ -219,9 +224,12 @@ def _load_features(source_dir: Path, parameters: dict[str, object]) -> dict[str,
             "rw_wellboard_value": 0.0, "rw_wellboard_rows": 0,
             "ws_invoice": False, "completion_hour": None,
             "raw_required_by_article": defaultdict(float),
+            "raw_required_group_by_article": {},
             "raw_booked_by_article": defaultdict(float),
+            "raw_booked_group_by_article": {},
             "fm_value_by_article": defaultdict(float),
             "fm_groups_by_article": defaultdict(set),
+            "rw_groups_by_article": defaultdict(set),
             "rw_value_by_article": defaultdict(float),
             "rw_rows_by_article": defaultdict(int),
         }
@@ -281,7 +289,11 @@ def _load_features(source_dir: Path, parameters: dict[str, object]) -> dict[str,
             features[order]["fm_value_by_article"][article] += value
         if article.startswith(wellboard_prefix):
             features[order]["fm_wellboard_value"] += value
-        group = row.get("GruppeBezeichnung", "").casefold()
+        group = (
+            row.get("ArtikelGruppeBez")
+            or row.get("GruppeBezeichnung")
+            or ""
+        ).strip().casefold()
         if article and group:
             features[order]["fm_groups_by_article"][article].add(group)
         if group in {"farben", "lacke"} or article.startswith("MIX"):
@@ -297,18 +309,26 @@ def _load_features(source_dir: Path, parameters: dict[str, object]) -> dict[str,
             features[order]["raw_booked_by_article"][article] += quantity
             features[order]["rw_rows_by_article"][article] += 1
             features[order]["rw_value_by_article"][article] += _number(row.get("WertMat", "")) or 0.0
+            group = (row.get("ArtikelGruppeBez") or "").strip().casefold()
+            if group:
+                features[order]["raw_booked_group_by_article"][article] = group
+                features[order]["rw_groups_by_article"][article].add(group)
         if article.startswith(wellboard_prefix):
             features[order]["rw_wellboard_rows"] += 1
             features[order]["rw_wellboard_value"] += _number(row.get("WertMat", "")) or 0.0
 
-    for row in read_rows(source_dir, "RohwarenPos.csv"):
-        order = row["BelegNummer"].strip()
-        if order not in features:
-            continue
-        article = row.get("Artikel", "").strip().upper()
-        quantity = _number(row.get("Menge", ""))
-        if article and quantity is not None and quantity > 0:
-            features[order]["raw_required_by_article"][article] += quantity
+    if (source_dir / "RohwarenPos.csv").is_file():
+        for row in read_rows(source_dir, "RohwarenPos.csv"):
+            order = row["BelegNummer"].strip()
+            if order not in features:
+                continue
+            article = row.get("Artikel", "").strip().upper()
+            quantity = _number(row.get("Menge", ""))
+            if article and quantity is not None and quantity > 0:
+                features[order]["raw_required_by_article"][article] += quantity
+                group = (row.get("ArtikelGruppeBez") or "").strip().casefold()
+                if group:
+                    features[order]["raw_required_group_by_article"][article] = group
 
     for row in read_rows(source_dir, "Rechnungskontrollen.csv"):
         order = row["Traeger"].strip()
@@ -334,12 +354,35 @@ def _load_features(source_dir: Path, parameters: dict[str, object]) -> dict[str,
         else:
             item["wellboard_cost_source"] = "NONE"
             item["wellboard_net_value"] = 0.0
-        ratios = [
-            abs(item["raw_booked_by_article"].get(article, 0.0)) / required
+        exact_articles = set(item["raw_required_by_article"]).intersection(
+            item["raw_booked_by_article"]
+        )
+        ratios: list[tuple[float, str]] = [
+            (
+                abs(item["raw_booked_by_article"].get(article, 0.0)) / required,
+                "EXACT_ARTICLE",
+            )
             for article, required in item["raw_required_by_article"].items()
-            if required > 0 and article in item["raw_booked_by_article"]
+            if required > 0 and article in exact_articles
         ]
-        item["maximum_raw_material_quantity_ratio"] = max(ratios, default=None)
+        required_by_group: defaultdict[str, float] = defaultdict(float)
+        booked_by_group: defaultdict[str, float] = defaultdict(float)
+        for article, required in item["raw_required_by_article"].items():
+            group = item["raw_required_group_by_article"].get(article, "")
+            if article not in exact_articles and group and required > 0:
+                required_by_group[group] += required
+        for article, booked in item["raw_booked_by_article"].items():
+            group = item["raw_booked_group_by_article"].get(article, "")
+            if article not in exact_articles and group:
+                booked_by_group[group] += booked
+        ratios.extend(
+            (abs(booked_by_group[group]) / required, "ARTICLE_GROUP_ALTERNATIVE")
+            for group, required in required_by_group.items()
+            if required > 0 and group in booked_by_group
+        )
+        maximum = max(ratios, default=None, key=lambda value: value[0])
+        item["maximum_raw_material_quantity_ratio"] = maximum[0] if maximum else None
+        item["raw_material_match_level"] = maximum[1] if maximum else "NOT_AVAILABLE"
         all_material_articles = set(item["fm_value_by_article"]).union(item["rw_value_by_article"])
         material_costs: dict[str, float] = {}
         for article in all_material_articles:
@@ -349,7 +392,10 @@ def _load_features(source_dir: Path, parameters: dict[str, object]) -> dict[str,
                 material_costs[article] = max(item["fm_value_by_article"].get(article, 0.0), 0.0)
         paper_cost = sum(
             value for article, value in material_costs.items()
-            if paper_cardboard_groups.intersection(item["fm_groups_by_article"].get(article, set()))
+            if paper_cardboard_groups.intersection(
+                item["fm_groups_by_article"].get(article, set())
+                | item["rw_groups_by_article"].get(article, set())
+            )
         )
         total_material_cost = sum(material_costs.values())
         item["paper_cardboard_material_cost"] = paper_cost
@@ -577,8 +623,13 @@ def analyze_performance(
         raw_status = _raw_material_status(raw_ratio, raw_levels)
         if raw_status in {"HINWEIS", "PRUEFEN", "KRITISCH"}:
             reason_codes.append(f"ROHWARENMENGE_{raw_status}")
+            match_text = (
+                "einem exakt passenden Artikel"
+                if item["raw_material_match_level"] == "EXACT_ARTICLE"
+                else "einem Ersatzartikel derselben Artikelgruppe"
+            )
             explanations.append(
-                "Die absolute Netto-Rohwarenbuchung ist bei mindestens einem exakt passenden Artikel "
+                f"Die absolute Netto-Rohwarenbuchung ist bei {match_text} "
                 f"{raw_ratio:.2f}-mal so hoch wie die positive Sollmenge (Stufe {raw_status}). "
                 "Eine nicht korrigierte Restpalette ist möglich."
             )
@@ -620,6 +671,7 @@ def analyze_performance(
             "wellboard_cost_source": item["wellboard_cost_source"], "wellboard_net_value": item["wellboard_net_value"],
             "series_candidate": item["series_candidate"], "series_color_overlap": item["series_color_overlap"],
             "maximum_raw_material_quantity_ratio": raw_ratio,
+            "raw_material_match_level": item["raw_material_match_level"],
             "raw_material_quantity_status": raw_status,
             "paper_cardboard_material_cost_eur": item["paper_cardboard_material_cost"],
             "paper_cardboard_share_of_revenue": _ratio(item["paper_cardboard_material_cost"], item["revenue"]),

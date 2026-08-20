@@ -80,6 +80,18 @@ Je Auftrag und exakt gleichem Rohwarenartikel wird berechnet:
 abs(Summe RW_Buchungen.Menge) / Summe positiver RohwarenPos.Menge
 ```
 
+Die Zuordnung erfolgt verbindlich in zwei Schritten:
+
+1. zuerst exakt gleicher Artikel zwischen Sollposition und Buchung,
+2. danach nur für noch nicht zugeordnete Artikel ein Vergleich innerhalb
+   derselben Artikelgruppe.
+
+Damit wird ein Alternativmaterial nicht mit einer fachlich anderen Sollposition
+verrechnet. `RohwarenPos.csv` ist für die historische Peer-Referenz optional;
+fehlt sie dort, bleiben die Finanz-/Zeitreferenzen nutzbar. Für den zu bewertenden
+Testauftrag ist ohne Rohwarenposition keine Mengenprüfung möglich und der Status
+bleibt `NICHT_BEWERTET`.
+
 Die erste Parameterfassung verwendet drei Stufen:
 
 | Faktor | Status | Wirkung |
