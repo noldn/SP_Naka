@@ -28,6 +28,7 @@ COST_FIELDS = [
     "reconciliation_difference_rate", "actual_material_cost_eur",
     "production_cost_eur", "invoice_cost_eur", "ktr_cost_eur", "lager_cost_eur",
     "material_surcharge_eur", "vv_surcharge_eur", "fixed_surcharge_eur",
+    "theoretical_invoice_cost_eur",
     "theoretical_total_cost_eur", "theoretical_result_eur", "theoretical_complete",
     "price_critical", "afterproduction_detected", "manual_review_required",
     "reason_codes", "reason_explanation",
@@ -484,7 +485,7 @@ def assess_order_costs(
     theoretical_vv = _round(float(theory_production["theoretical"]) * float(rates["vv_rate"]) / 100.0)
     theoretical_total = _round(
         float(theory_material["total"]) + float(theory_production["theoretical"])
-        + invoice_cost + ktr_cost + fixed + theoretical_mgk + theoretical_vv
+        + ktr_cost + fixed + theoretical_mgk + theoretical_vv
     )
     theoretical_result = _round(revenue - theoretical_total) if revenue is not None else None
     complete = bool(theory_material["complete"])
@@ -526,6 +527,7 @@ def assess_order_costs(
         "theoretical_production_cost": theory_production["theoretical"],
         "theoretical_material_surcharge": theoretical_mgk,
         "theoretical_vv_surcharge": theoretical_vv,
+        "theoretical_invoice_cost": 0.0,
         "theoretical_total_cost": theoretical_total,
         "theoretical_result": theoretical_result,
         "theoretical_complete": complete,
@@ -624,6 +626,7 @@ def analyze_costs(
             "material_surcharge_eur": assessment["material_surcharge"],
             "vv_surcharge_eur": assessment["vv_surcharge"],
             "fixed_surcharge_eur": assessment["fixed_surcharge"],
+            "theoretical_invoice_cost_eur": assessment["theoretical_invoice_cost"],
             "theoretical_total_cost_eur": assessment["theoretical_total_cost"],
             "theoretical_result_eur": assessment["theoretical_result"],
             "theoretical_complete": assessment["theoretical_complete"],

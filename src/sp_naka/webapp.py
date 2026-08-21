@@ -706,6 +706,7 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
     theory_rows = [
         {"label": "Material mit Sollmengen", "actual": _optional_number(cost_assessment["actual_material_cost"], "money"), "theory": _optional_number(cost_assessment["theoretical_material_cost"], "money")},
         {"label": "Produktion mit Idealleistung", "actual": _optional_number(cost_assessment["production_cost"], "money"), "theory": _optional_number(cost_assessment["theoretical_production_cost"], "money")},
+        {"label": "Eingangsfaktura (z. B. WKS/WS)", "actual": _optional_number(cost_assessment["invoice_cost"], "money"), "theory": _optional_number(cost_assessment["theoretical_invoice_cost"], "money")},
         {"label": "Materialgemeinkosten", "actual": _optional_number(cost_assessment["material_surcharge"], "money"), "theory": _optional_number(cost_assessment["theoretical_material_surcharge"], "money")},
         {"label": "VV-Zuschlag", "actual": _optional_number(cost_assessment["vv_surcharge"], "money"), "theory": _optional_number(cost_assessment["theoretical_vv_surcharge"], "money")},
         {"label": "Gesamtkosten", "actual": _optional_number(cost_assessment["reconstructed_cost"], "money"), "theory": _optional_number(cost_assessment["theoretical_total_cost"], "money")},

@@ -35,7 +35,7 @@ class CostingTests(unittest.TestCase):
     def _assessment(self, official: str = "536") -> dict[str, object]:
         return assess_order_costs(
             self.root,
-            {"BelegNummer": "100", "BelegDatum": "01.01.2024", "Erlöse": "500", "Kosten": official, "Zusatztext": "Nachprodukiton Reklamation"},
+            {"BelegNummer": "100", "BelegDatum": "01.01.2024", "Erlöse": "450", "Kosten": official, "Zusatztext": "Nachprodukiton Reklamation"},
             [],
             [{"Auftrag": "100", "Stufe": "DRUCK", "KSTKurz": "M1", "Dauer": "2", "Menge": "100", "Kosten": "200"}],
             [
@@ -63,7 +63,8 @@ class CostingTests(unittest.TestCase):
         self.assertEqual(20.0, result["vv_surcharge"])
         self.assertEqual(536.0, result["reconstructed_cost"])
         self.assertEqual("OK", result["reconciliation_status"])
-        self.assertEqual(512.0, result["theoretical_total_cost"])
+        self.assertEqual(0.0, result["theoretical_invoice_cost"])
+        self.assertEqual(462.0, result["theoretical_total_cost"])
         self.assertTrue(result["price_critical"])
         self.assertIn("PREIS_KRITISCH", result["reason_codes"])
 

@@ -6,6 +6,9 @@ Wesentliche Änderungen werden hier in umgekehrt chronologischer Reihenfolge erf
 
 ### Korrigiert
 
+- Eingangsfaktura, insbesondere Werkzeugpositionen wie WKS und WS, wird in den
+  theoretischen Sollkosten nicht mehr berücksichtigt. In der Istkostenabstimmung
+  bleibt sie unverändert enthalten.
 - Produktionsmeldungen mit ausschließlich null gesetzten Kosten werden in der
   Nachkalkulation als `0,00 € im Export` statt als nicht geliefert ausgewiesen.
 

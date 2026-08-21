@@ -649,6 +649,9 @@ saldiert.
 - Für theoretische Rohwarenkosten gilt die positive Sollmenge aus `RohwarenPos`.
   Der Preis wird zuerst aus der Netto-Mengen-/Wertsumme desselben Artikels und
   nur ersatzweise aus derselben Artikelgruppe abgeleitet.
+- Eingangsfaktura aus `Rechnungskontrollen.csv`, insbesondere Werkzeugpositionen
+  wie WKS und WS, bleibt Bestandteil der Istkostenabstimmung, wird jedoch bei den
+  theoretischen Sollkosten vollständig mit null angesetzt.
 - Theoretische Produktionskosten verwenden das 75. Perzentil der Leistung von
   mindestens fünf Vergleichsaufträgen in der Reihenfolge gleiche WM und Maschine,
   gleiche WS und Maschine, gleiche Maschine. Ohne Referenz oder Leistung bleibt
