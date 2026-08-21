@@ -22,8 +22,8 @@ class NachkalkulationTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         write_csv(
             self.root / "Auftragskopf.csv",
-            ["BelegNummer", "BelegKopfKey", "Erlöse", "Kosten", "Zusatztext"],
-            [["100", "K100", "1000,00", "1200,00", "Testauftrag"]],
+            ["BelegNummer", "BelegKopfKey", "BelegDatum", "Erlöse", "Kosten", "Zusatztext"],
+            [["100", "K100", "01.01.2024", "1000,00", "1200,00", "Testauftrag"]],
         )
         write_csv(
             self.root / "VertriebsPositionen.csv",
@@ -49,6 +49,14 @@ class NachkalkulationTests(unittest.TestCase):
             self.root / "KTRBuchungenKI.csv",
             ["KostenTraeger", "Betrag"],
             [["100", "3"]],
+        )
+        write_csv(
+            self.root / "Zuschlaege.csv",
+            ["Zuschlagsart", "Stundensatz", "ZuschlagVariabel", "ZuschlagFix", "GueltigVon", "GueltigBis"],
+            [
+                ["MatGemeinkosten", "2", "20", "100", "01.01.2020", "31.12.2099"],
+                ["VVZuschlag", "2", "10", "0", "01.01.2020", "31.12.2099"],
+            ],
         )
 
     def tearDown(self) -> None:

@@ -15,6 +15,7 @@ from collections import defaultdict
 from datetime import date, datetime
 from pathlib import Path
 
+from .costing import is_afterproduction
 from .csv_io import read_rows
 from .errors import AnalysisError
 
@@ -35,7 +36,8 @@ PERFORMANCE_FIELDS = [
     "run_id", "order_number", "performance_status", "absolute_result",
     "revenue_eur", "cost_eur", "margin_eur", "margin_rate",
     "peer_group_level", "peer_group_size", "robust_margin_z",
-    "accepted_negative_customer", "manual_review_required", "reason_codes",
+    "accepted_negative_customer", "afterproduction_detected",
+    "negative_result_exception", "manual_review_required", "reason_codes",
     "reason_explanation", "reason_review_status", "quantity_proxy", "quantity_bucket", "product_group",
     "construction", "die_form", "extra_effort_entries", "handwork_present",
     "print_approval_present", "first_observed_die_form", "ws_invoice_present",
@@ -217,6 +219,8 @@ def _load_features(source_dir: Path, parameters: dict[str, object]) -> dict[str,
             "cost": cost,
             "margin": margin,
             "margin_rate": margin_rate,
+            "description": row.get("Zusatztext", "").strip(),
+            "afterproduction": is_afterproduction(row.get("Zusatztext")),
             "constructions": set(), "die_forms": set(), "colors": set(),
             "quantity_proxy": None, "actual_duration": 0.0,
             "extra_effort": 0, "handwork": False, "print_approval": False,
@@ -572,12 +576,21 @@ def analyze_performance(
         customer_code = str(item["customer"]).split("|", 1)[-1]
         periods = accepted.get(str(item["customer"]), []) + accepted.get(customer_code, [])
         accepted_customer = _accepted_on(periods, item["order_date"])
+        negative_afterproduction = bool(
+            item["afterproduction"] and item["margin"] is not None and item["margin"] < 0
+        )
         if item["margin"] is not None and item["margin"] < 0:
             reason_codes.append("ERGEBNIS_NEGATIV")
             explanations.append("Erlöse minus Kosten ist negativ.")
             if accepted_customer:
                 reason_codes.append("AUSLASTUNGSKUNDE")
                 explanations.append("Negatives Ergebnis ist für diesen Auslastungskunden grundsätzlich zulässig.")
+        if item["afterproduction"]:
+            reason_codes.append("NACHPRODUKTION_ERKANNT")
+            explanations.append(
+                "Der Zusatztext kennzeichnet den Auftrag als Nachproduktion; "
+                "ein negatives Ergebnis wird als fachlich erwartbare Ausnahme freigegeben."
+            )
         if status in {
             "SEHR_NEGATIV", "SEHR_POSITIV", "AUFFAELLIG_NEGATIV", "AUFFAELLIG_POSITIV"
         }:
@@ -639,6 +652,16 @@ def analyze_performance(
             "SEHR_NEGATIV", "SEHR_POSITIV", "AUFFAELLIG_NEGATIV", "AUFFAELLIG_POSITIV"
         }
         manual |= raw_status in {"PRUEFEN", "KRITISCH"}
+        independent_afterproduction_codes = {
+            "LEISTUNG_ZEIT_AUFFAELLIG", "MATERIALAUFWAND_AUFFAELLIG",
+            "MEHRAUFWAND_ERFASST", "DRUCKABSTIMMUNG_ERKANNT",
+            "HANDARBEIT_MIT_AUSSERGEWOEHNLICHEM_AUFWAND",
+            "ROHWARENMENGE_PRUEFEN", "ROHWARENMENGE_KRITISCH",
+        }
+        if negative_afterproduction:
+            manual = bool(independent_afterproduction_codes.intersection(reason_codes))
+            if not manual:
+                status = "AKZEPTIERTE_AUSNAHME_NACHPRODUKTION"
         explanatory_codes = {
             "PREISNIVEAU_NIEDRIG", "LEISTUNG_ZEIT_AUFFAELLIG",
             "MATERIALAUFWAND_AUFFAELLIG", "MEHRAUFWAND_ERFASST",
@@ -660,6 +683,8 @@ def analyze_performance(
             "peer_group_level": selected_key[0] if selected_key else "NONE",
             "peer_group_size": selected_profile["size"] if selected_profile else 0,
             "robust_margin_z": margin_z, "accepted_negative_customer": accepted_customer,
+            "afterproduction_detected": item["afterproduction"],
+            "negative_result_exception": negative_afterproduction,
             "manual_review_required": manual, "reason_codes": "|".join(reason_codes),
             "reason_explanation": " | ".join(explanations) or "Keine zusätzliche Erklärungsevidenz erkannt.",
             "reason_review_status": reason_review_status,
@@ -679,7 +704,7 @@ def analyze_performance(
             "total_material_cost_eur": item["total_material_cost"],
             "total_material_share_of_revenue": _ratio(item["total_material_cost"], item["revenue"]),
             "total_material_share_of_cost": _ratio(item["total_material_cost"], item["cost"]),
-            "limitations": "Keine Lagerkosten; Ursachen sind Evidenzhinweise; Referenzexport kann historische Lücken enthalten.",
+            "limitations": "Ursachen sind Evidenzhinweise; Referenzexport kann historische Lücken enthalten.",
         })
     return output, {
         "method": "ROBUST_HIERARCHICAL_PEER_GROUPS",

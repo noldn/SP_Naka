@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 from .csv_io import read_rows
 from .errors import AnalysisError
+from .costing import confirmed_data_error_orders
 from .nachkalkulation import load_order_calculation, number as parse_number
 from .pipeline import run_analysis
 
@@ -251,9 +252,20 @@ class WebApplication:
                     continue
             except OSError:
                 continue
-            for row in _read_csv(item["dir"] / "performance_assessments.csv"):
-                if row.get("order_number") == order_number:
-                    return {**row, "run_id": item["dir"].name}
+            performance = next((row for row in _read_csv(item["dir"] / "performance_assessments.csv") if row.get("order_number") == order_number), {})
+            costs = next((row for row in _read_csv(item["dir"] / "cost_assessments.csv") if row.get("order_number") == order_number), {})
+            if performance or costs:
+                codes = list(dict.fromkeys(
+                    code for value in (performance.get("reason_codes", ""), costs.get("reason_codes", ""))
+                    for code in value.split("|") if code
+                ))
+                explanations = [value for value in (performance.get("reason_explanation", ""), costs.get("reason_explanation", "")) if value]
+                return {
+                    **performance, **costs,
+                    "reason_codes": "|".join(codes),
+                    "reason_explanation": " | ".join(explanations),
+                    "run_id": item["dir"].name,
+                }
         return {}
 
     def save_order_clarification(self, form: dict[str, list[str]]) -> None:
@@ -344,6 +356,7 @@ class WebApplication:
                 reference_data_dir=Path(str(config["reference_data_dir"])),
                 analysis_parameters_path=self.local_parameters_path,
                 accepted_customers_path=self.customers_path,
+                order_clarifications_path=self.order_clarifications_path,
             )
             state = {
                 "active": False,
@@ -565,7 +578,12 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
             "Fehlende Kostenbestandteile werden gekennzeichnet und nicht geschätzt.</p>",
         )
     try:
-        calculation = load_order_calculation(app.calculation_data_dir(selection), order)
+        calculation = load_order_calculation(
+            app.calculation_data_dir(selection),
+            order,
+            Path(str(app.config()["reference_data_dir"])),
+            confirmed_data_error_orders(app.order_clarifications_path),
+        )
     except AnalysisError as exc:
         return _card("Auftrag aufrufen", search) + _card("Nicht gefunden", html.escape(str(exc)), "warning-card")
 
@@ -575,6 +593,7 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
     cost = calculation["cost"]
     result = calculation["result"]
     margin_rate = calculation["margin_rate"]
+    cost_assessment = calculation["cost_assessment"]
     result_class = "negative" if isinstance(result, (int, float)) and result < 0 else "positive"
     identity = f"""<div class="order-heading"><div><span>Auftrag</span><strong>{html.escape(order)}</strong></div>
 <div><span>Beschreibung</span><strong>{html.escape(str(header.get('Zusatztext', '') or '—'))}</strong></div>
@@ -584,8 +603,9 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
 <div><span>Erlöse</span><strong>{html.escape(_optional_number(revenue, 'money'))}</strong></div>
 <div><span>Gesamtkosten</span><strong>{html.escape(_optional_number(cost, 'money'))}</strong></div>
 <div class="{result_class}"><span>Ergebnis</span><strong>{html.escape(_optional_number(result, 'money'))}</strong><small>{html.escape(_optional_number(margin_rate, 'ratio'))}</small></div>
-<div><span>Rekonstruierte Detailkosten*</span><strong>{html.escape(_optional_number(calculation['reconstructed_direct_costs'], 'money'))}</strong></div></div>
-<p class="hint">* Summe der gelieferten Material-, Rohwaren-, Rechnungskontroll- und Kostenträgerdaten; keine offizielle Einzelkostensumme.</p>"""
+<div><span>Abgestimmte Istkosten*</span><strong>{html.escape(_optional_number(cost_assessment['reconstructed_cost'], 'money'))}</strong><small>{html.escape(str(cost_assessment['reconciliation_status']))}</small></div>
+<div><span>Theoretische Sollkosten</span><strong>{html.escape(_optional_number(cost_assessment['theoretical_total_cost'], 'money'))}</strong><small>{'PREIS KRITISCH' if cost_assessment['price_critical'] else 'theoretisch positiv möglich'}</small></div></div>
+<p class="hint">* Rekonstruktion aus Istmaterial, Produktionszeiten, Rechnungskontrollen, KORE-/Lagerkosten und den zum Belegdatum gültigen Zuschlägen.</p>"""
 
     positions = _data_table(
         calculation["positions"],
@@ -666,16 +686,62 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
 
     totals = calculation["source_totals"]
     source_rows = [
-        {"label": "Fertigungsmaterial", "value": _optional_number(totals["manufacturing_material"], "money")},
-        {"label": "RW-Buchungen", "value": _optional_number(totals["raw_bookings"], "money")},
+        {"label": "Material Ist (RW je Artikel, FM als Fallback)", "value": _optional_number(cost_assessment["actual_material_cost"], "money")},
+        {"label": "davon Rohmaterial 01/02/03", "value": _optional_number(cost_assessment["actual_raw_material_cost"], "money")},
+        {"label": "Produktionskosten aus ProdZeiten", "value": _optional_number(cost_assessment["production_cost"], "money")},
         {"label": "Rechnungskontrollen", "value": _optional_number(totals["invoice_controls"], "money")},
-        {"label": "Kostenträgerbuchungen", "value": _optional_number(totals["cost_bookings"], "money")},
-        {"label": "VV-Zuschlag fix/variabel", "value": "nicht geliefert"},
-        {"label": "Materialzuschlag fix/variabel", "value": "nicht geliefert"},
-        {"label": "Lagerkosten", "value": "nicht geliefert"},
+        {"label": "KORE-Buchungen gesamt", "value": _optional_number(cost_assessment["ktr_cost"], "money")},
+        {"label": "davon Lagerkosten", "value": _optional_number(cost_assessment["lager_cost"], "money")},
+        {"label": "davon Fracht", "value": _optional_number(cost_assessment["freight_cost"], "money")},
+        {"label": f"Materialgemeinkosten ({_optional_number(cost_assessment['material_surcharge_rate'])} %)", "value": _optional_number(cost_assessment["material_surcharge"], "money")},
+        {"label": f"VV-Zuschlag ({_optional_number(cost_assessment['vv_surcharge_rate'])} %)", "value": _optional_number(cost_assessment["vv_surcharge"], "money")},
+        {"label": "Fixer Verwaltungs-/Vertriebszuschlag", "value": _optional_number(cost_assessment["fixed_surcharge"], "money")},
+        {"label": "Rekonstruierte Istkosten", "value": _optional_number(cost_assessment["reconstructed_cost"], "money")},
+        {"label": "Offizielle Kosten Auftragskopf", "value": _optional_number(cost_assessment["official_cost"], "money")},
+        {"label": f"Differenz ({cost_assessment['reconciliation_status']})", "value": f"{_optional_number(cost_assessment['reconciliation_difference'], 'money')} / {_optional_number(cost_assessment['reconciliation_difference_rate'], 'ratio')}"},
     ]
     limitations = "".join(f"<li>{html.escape(str(value))}</li>" for value in calculation["limitations"])
     cost_sources = _data_table(source_rows, (("Kostenquelle", "label"), ("Betrag/Status", "value"))) + f'<ul class="limitations">{limitations}</ul>'
+
+    theory_rows = [
+        {"label": "Material mit Sollmengen", "actual": _optional_number(cost_assessment["actual_material_cost"], "money"), "theory": _optional_number(cost_assessment["theoretical_material_cost"], "money")},
+        {"label": "Produktion mit Idealleistung", "actual": _optional_number(cost_assessment["production_cost"], "money"), "theory": _optional_number(cost_assessment["theoretical_production_cost"], "money")},
+        {"label": "Materialgemeinkosten", "actual": _optional_number(cost_assessment["material_surcharge"], "money"), "theory": _optional_number(cost_assessment["theoretical_material_surcharge"], "money")},
+        {"label": "VV-Zuschlag", "actual": _optional_number(cost_assessment["vv_surcharge"], "money"), "theory": _optional_number(cost_assessment["theoretical_vv_surcharge"], "money")},
+        {"label": "Gesamtkosten", "actual": _optional_number(cost_assessment["reconstructed_cost"], "money"), "theory": _optional_number(cost_assessment["theoretical_total_cost"], "money")},
+        {"label": "Ergebnis", "actual": _optional_number(result, "money"), "theory": _optional_number(cost_assessment["theoretical_result"], "money")},
+    ]
+    theory_summary = _data_table(theory_rows, (("Kostenblock", "label"), ("Ist", "actual"), ("Theoretisch", "theory")))
+    theory_production_rows = []
+    for row in cost_assessment["theoretical_production_details"]:
+        theory_production_rows.append({
+            "stage": row["stage"], "machine": row["machine"],
+            "actual_performance": _optional_number(row["actual_performance"]),
+            "ideal_performance": _optional_number(row["ideal_performance"]),
+            "reference": f"{row['reference_level']} ({row['reference_count']})",
+            "actual_cost": _optional_number(row["actual_cost"], "money"),
+            "theoretical_cost": _optional_number(row["theoretical_cost"], "money"),
+        })
+    theory_production = _data_table(
+        theory_production_rows,
+        (("Stufe", "stage"), ("Maschine", "machine"), ("Ist-Leistung", "actual_performance"),
+         ("Idealleistung P75", "ideal_performance"), ("Referenz", "reference"),
+         ("Istkosten", "actual_cost"), ("Sollkosten", "theoretical_cost")),
+    )
+    theory_material_rows = []
+    for row in cost_assessment["theoretical_material_details"]:
+        theory_material_rows.append({
+            "article": row["article"], "group": row["group"],
+            "quantity": _optional_number(row["planned_quantity"]),
+            "price": _optional_number(row["unit_price"], "money"),
+            "match": row["match_level"], "cost": _optional_number(row["theoretical_cost"], "money"),
+        })
+    theory_material = _data_table(
+        theory_material_rows,
+        (("Artikel", "article"), ("Gruppe", "group"), ("Sollmenge", "quantity"),
+         ("abgeleiteter Preis", "price"), ("Zuordnung", "match"), ("Sollkosten", "cost")),
+    )
+    theoretical = theory_summary + f'<details><summary>Idealleistung je Produktionsstufe</summary>{theory_production}</details>' + f'<details><summary>Sollmaterial und Preiszuordnung</summary>{theory_material}</details>'
 
     test_case = app.test_case(order)
     clarification = app.order_clarification(order, selection)
@@ -753,7 +819,8 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
         + _card("Auftragspositionen", positions)
         + _card("Produktionsleistungen/-zeiten", production + f'<details><summary>Einzelmeldungen anzeigen ({len(calculation["production"])})</summary>{production_details}</details>')
         + _card("Einzelkosten aus gelieferten Quellen", individual)
-        + _card("Zusammenfassung der verfügbaren Kostenquellen", cost_sources)
+        + _card("Istkostenabstimmung", cost_sources)
+        + _card("Theoretische Sollkosten", theoretical)
     )
 
 
@@ -851,21 +918,35 @@ def _runs_page(app: WebApplication) -> str:
 def _order_rows(app: WebApplication, run_dir: Path, only_review: bool, query: str = "") -> list[dict[str, str]]:
     performance = {row["order_number"]: row for row in _read_csv(run_dir / "performance_assessments.csv")}
     static = {row["order_number"]: row for row in _read_csv(run_dir / "order_assessments.csv")}
+    costs = {row["order_number"]: row for row in _read_csv(run_dir / "cost_assessments.csv")}
     manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     source = Path(manifest.get("configuration", {}).get("source_directory", ""))
     descriptions = {}
     if source.is_dir() and (source / "Auftragskopf.csv").is_file():
         descriptions = {row["BelegNummer"].strip(): row.get("Zusatztext", "").strip() for row in read_rows(source, "Auftragskopf.csv")}
-    orders = sorted(set(performance).union(static))
+    orders = sorted(set(performance).union(static).union(costs))
     result = []
     for order in orders:
-        p, s = performance.get(order, {}), static.get(order, {})
-        if only_review and not (p.get("manual_review_required") == "True" or s.get("manual_review_required") == "True"):
+        p, s, c = performance.get(order, {}), static.get(order, {}), costs.get(order, {})
+        if only_review and not any(row.get("manual_review_required") == "True" for row in (p, s, c)):
             continue
-        haystack = " ".join((order, descriptions.get(order, ""), p.get("reason_explanation", ""))).casefold()
+        combined_codes = list(dict.fromkeys(
+            code for value in (p.get("reason_codes", ""), c.get("reason_codes", ""), s.get("reason_codes", ""))
+            for code in value.split("|") if code
+        ))
+        combined_explanation = " | ".join(
+            value for value in (p.get("reason_explanation", ""), c.get("reason_explanation", ""), s.get("reasons", "")) if value
+        )
+        haystack = " ".join((order, descriptions.get(order, ""), combined_explanation, " ".join(combined_codes))).casefold()
         if query and query.casefold() not in haystack:
             continue
-        result.append({**s, **p, "order_number": order, "description": descriptions.get(order, "")})
+        result.append({
+            **s, **p, **c,
+            "reason_codes": "|".join(combined_codes),
+            "reason_explanation": combined_explanation,
+            "order_number": order,
+            "description": descriptions.get(order, ""),
+        })
     return result
 
 
@@ -878,11 +959,11 @@ def _orders_page(app: WebApplication, params: dict[str, list[str]], only_review:
     table_rows = "".join(
         f'<tr><td><a href="/order?{urlencode({"run":run_id,"order":row["order_number"]})}">{html.escape(row["order_number"])}</a></td>'
         f'<td>{html.escape(row.get("description", ""))}</td><td><span class="status {html.escape(row.get("performance_status", "").lower())}">{html.escape(row.get("performance_status", ""))}</span></td>'
-        f'<td>{html.escape(row.get("overall_status", ""))}</td><td>{html.escape(row.get("reason_explanation", row.get("reasons", "")))}</td></tr>'
+        f'<td>{html.escape(row.get("reconciliation_status", ""))}</td><td>{html.escape(row.get("overall_status", ""))}</td><td>{html.escape(row.get("reason_explanation", row.get("reasons", "")))}</td></tr>'
         for row in rows
-    ) or '<tr><td colspan="5">Keine passenden Aufträge</td></tr>'
+    ) or '<tr><td colspan="6">Keine passenden Aufträge</td></tr>'
     search = f'<form method="get" class="search"><input type="hidden" name="run" value="{html.escape(run_id)}"><input name="q" value="{html.escape(query)}" placeholder="Auftrag oder Beschreibung"><button>Suchen</button></form>'
-    return _card(f"Lauf {run_id}", search + f'<table><thead><tr><th>Auftrag</th><th>Zusatzbeschreibung</th><th>Performance</th><th>Statisch</th><th>Begründung</th></tr></thead><tbody>{table_rows}</tbody></table>')
+    return _card(f"Lauf {run_id}", search + f'<table><thead><tr><th>Auftrag</th><th>Zusatzbeschreibung</th><th>Performance</th><th>Kostenabstimmung</th><th>Statisch</th><th>Begründung</th></tr></thead><tbody>{table_rows}</tbody></table>')
 
 
 def _order_detail(app: WebApplication, params: dict[str, list[str]]) -> str:
@@ -899,6 +980,11 @@ def _order_detail(app: WebApplication, params: dict[str, list[str]]) -> str:
         ("Performance", "performance_status", "text"), ("Ergebnis", "absolute_result", "text"),
         ("Erlöse", "revenue_eur", "money"), ("Kosten", "cost_eur", "money"),
         ("Marge", "margin_eur", "money"),
+        ("Kostenabstimmung", "reconciliation_status", "text"),
+        ("Rekonstruierte Istkosten", "reconstructed_cost_eur", "money"),
+        ("Abweichung Auftragskopf", "reconciliation_difference_eur", "money"),
+        ("Theoretische Sollkosten", "theoretical_total_cost_eur", "money"),
+        ("Theoretisches Ergebnis", "theoretical_result_eur", "money"),
         ("Papier/Karton-Faktor zu Erlös", "paper_cardboard_share_of_revenue", "ratio"),
         ("Gesamtmaterial-Faktor zu Erlös", "total_material_share_of_revenue", "ratio"),
             ("Rohwarenstufe", "raw_material_quantity_status", "text"),

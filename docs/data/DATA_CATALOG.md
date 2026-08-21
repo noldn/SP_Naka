@@ -1,7 +1,7 @@
 # Datenkatalog SP_Naka
 
 Dieser Katalog beschreibt die lokal bereitgestellten Datenquellen anhand einer
-strukturellen Prüfung vom 2026-08-12. Er enthält keine echten Datensätze oder
+strukturellen Prüfung vom 2026-08-21. Er enthält keine echten Datensätze oder
 Geschäftswerte, sondern nur Metadaten und aggregierte Qualitätskennzahlen.
 
 ## Statuskennzeichnung
@@ -25,7 +25,7 @@ Geschäftswerte, sondern nur Metadaten und aggregierte Qualitätskennzahlen.
 
 ## Technische Beurteilung der CSV-Dateien
 
-Alle zehn Dateien sind technisch lesbar und grundsätzlich für eine automatisierte
+Alle elf Dateien sind technisch lesbar und grundsätzlich für eine automatisierte
 Verarbeitung geeignet.
 
 | Eigenschaft | Ergebnis | Bewertung |
@@ -39,7 +39,7 @@ Verarbeitung geeignet.
 | Leere Datenzeilen | 0 | Bestätigt |
 | Leere oder doppelte Header | 0 | Bestätigt |
 
-Für alle zehn Quellen liegt außerdem eine gleichnamige Datei im lokalen
+Für alle elf Quellen liegt außerdem eine gleichnamige Datei im lokalen
 Testdatenverzeichnis vor. Die Header stimmen jeweils exakt mit der zugehörigen
 Originaldatei überein. Die fachliche Abdeckung von Grenz- und Fehlerfällen durch
 diese kleinen Testausschnitte ist noch nicht bestätigt.
@@ -78,16 +78,17 @@ diese kleinen Testausschnitte ist noch nicht bestätigt.
 
 | ID | Datei | Logischer Tabellenname | Zeilen | Spalten | Technisch beobachtetes Tabellenkorn | Schlüsselstatus |
 |---|---|---|---:|---:|---|---|
-| SRC-001 | `Auftragskopf.csv` | `order_header` | 38.884 | 20 | eine eindeutige Auftragskopfzeile | drei eindeutige Kennungen bestätigt |
-| SRC-002 | `VertriebsPositionen.csv` | `sales_order_item` | 102.958 | 18 | eine eindeutige Vertriebsposition | Einzel- und zusammengesetzter Schlüssel bestätigt |
-| SRC-003 | `RohwarenPos.csv` | `raw_material_item` | 42.814 | 18 | eine eindeutige Rohwaren-/Belegposition | mehrere eindeutige Kennungen bestätigt |
-| SRC-004 | `RW_Buchungen.csv` | `raw_material_booking` | 65.805 | 9 | vermutlich eine Rohwarenbuchung | kein fachlich freigegebener Einzelbelegschlüssel |
-| SRC-005 | `Fertigungsmaterial.csv` | `production_material_usage` | 151.837 | 8 | vermutlich ein Materialverbrauch je Auftrag/Artikel/Gruppe | Kandidat nicht eindeutig |
-| SRC-006 | `ProdZeiten.csv` | `production_time_entry` | 398.869 | 17 | vermutlich eine Produktionszeit-/Arbeitsgangmeldung | keine Ereignis-ID vorhanden |
-| SRC-007 | `Planung.csv` | `production_plan_entry` | 264.707 | 17 | ein Planungsdatensatz je technischer `Id` | `Id` eindeutig bestätigt |
-| SRC-008 | `KTRBuchungenKI.csv` | `cost_object_booking` | 13.827 | 8 | summierte Kostenträgerbuchungen bestimmter Kostenarten | keine Buchungs-ID vorhanden |
-| SRC-009 | `Rechnungskontrollen.csv` | `invoice_control_item` | 9.499 | 11 | Rechnungskontrollpositionen für auftragsbezogene Beschaffungen | kein eindeutiger Schlüssel bestätigt |
-| SRC-010 | `Faktura.csv` | `order_billing_summary` | 27.334 | 11 | eine Faktura-Zusammenfassung je Auftrag | beide Auftragskennungen eindeutig |
+| SRC-001 | `Auftragskopf.csv` | `order_header` | 39.183 | 21 | eine eindeutige Auftragskopfzeile | drei eindeutige Kennungen bestätigt |
+| SRC-002 | `VertriebsPositionen.csv` | `sales_order_item` | 103.888 | 24 | eine eindeutige Vertriebsposition | Einzel- und zusammengesetzter Schlüssel bestätigt |
+| SRC-003 | `RohwarenPos.csv` | `raw_material_item` | 43.208 | 27 | eine eindeutige Rohwaren-/Belegposition | mehrere eindeutige Kennungen bestätigt |
+| SRC-004 | `RW_Buchungen.csv` | `raw_material_booking` | 66.423 | 19 | vermutlich eine Rohwarenbuchung | kein fachlich freigegebener Einzelbelegschlüssel |
+| SRC-005 | `Fertigungsmaterial.csv` | `production_material_usage` | 153.083 | 8 | vermutlich ein Materialverbrauch je Auftrag/Artikel/Gruppe | Kandidat nicht eindeutig |
+| SRC-006 | `ProdZeiten.csv` | `production_time_entry` | 402.598 | 18 | vermutlich eine Produktionszeit-/Arbeitsgangmeldung | keine Ereignis-ID vorhanden |
+| SRC-007 | `Planung.csv` | `production_plan_entry` | 267.027 | 18 | ein Planungsdatensatz je technischer `Id` | `Id` eindeutig bestätigt |
+| SRC-008 | `KTRBuchungenKI.csv` | `cost_object_booking` | 80.232 | 8 | summierte Kostenträgerbuchungen einschließlich Lagerkosten | keine Buchungs-ID vorhanden |
+| SRC-009 | `Rechnungskontrollen.csv` | `invoice_control_item` | 9.575 | 19 | Rechnungskontrollpositionen für auftragsbezogene Beschaffungen | kein eindeutiger Schlüssel bestätigt |
+| SRC-010 | `Faktura.csv` | `order_billing_summary` | 27.567 | 11 | eine Faktura-Zusammenfassung je Auftrag | beide Auftragskennungen eindeutig |
+| SRC-011 | `Zuschlaege.csv` | `surcharge_rate_history` | 42 | 6 | ein Zuschlagssatz je Art, Stundensatzkennung und Gültigkeitszeitraum | fachlicher Schlüssel noch zu bestätigen |
 
 ### Änderungen gegenüber der Prüfung vom 2026-08-10
 
@@ -108,8 +109,8 @@ diese kleinen Testausschnitte ist noch nicht bestätigt.
 
 - **Datei:** `Auftragskopf.csv`
 - **Logischer Tabellenname:** `order_header`
-- **Zeitraum:** 2023-01-01 bis 2026-08-11
-- **Zeilen:** 38.884
+- **Zeitraum:** 2023-01-01 bis 2026-08-20
+- **Zeilen:** 39.183
 - **Eine Zeile entspricht:** technisch einer eindeutigen Kopfzeile;
 - **Eindeutige Schlüssel:** `BelegKopfKey`, `V_BelegKopf_Obj` und `BelegNummer`
 - **Bevorzugter logischer Schlüssel:** `BelegKopfKey` als `order_header_key`;
@@ -435,8 +436,8 @@ diese kleinen Testausschnitte ist noch nicht bestätigt.
 
 - **Datei:** `KTRBuchungenKI.csv`
 - **Logischer Tabellenname:** `cost_object_booking`
-- **Zeitraum:** 2023-01-20 bis 2026-08-10
-- **Zeilen:** 13.827
+- **Zeitraum:** 2023-01-01 bis 2026-08-20
+- **Zeilen:** 80.232
 - **Eine Zeile entspricht:** plausibel einer Kostenträgerbuchung; fachlich bestätigen.
 - **Schlüssel:** keine Buchungs-ID. Ein getesteter zusammengesetzter Kandidat hat
   27 Duplikatzeilen; außerdem existieren 23 vollständig identische Zeilen.
@@ -451,7 +452,7 @@ diese kleinen Testausschnitte ist noch nicht bestätigt.
 | `KTRKostenart Key` | `cost_type_key` | Text, vollständig | Kostenart-Fremdschlüssel vermutet |
 | `BuchungsDatum` | `booking_date` | Datum, vollständig | Buchungsdatum |
 | `KostenTraeger` | `order_number` | ziffernartige ID, vollständig | FK zum Auftragskopf bestätigt |
-| `TrKoArt` | `cost_type_code` | Ganzzahl, vollständig | 3 Ausprägungen; Beziehung zu Kostenart-Key offen |
+| `TrKoArt` | `cost_type_code` | Ganzzahl, vollständig | `250950` kennzeichnet Lagerkosten; `7300`, `7310`, `7315` kennzeichnen Fracht; weitere Kostenarten bleiben als sonstige KORE-Kosten enthalten |
 | `Betrag` | `amount` | Dezimalzahl, vollständig | Währung/Vorzeichen offen; 203 negative Werte |
 | `Menge` | `quantity` | Dezimalzahl, vollständig | Einheit/Vorzeichen offen; 68 negative Werte |
 | `BuchungsText` | `booking_text` | Text, 0,043 % leer | Freitext; kann verwendet werden|
@@ -460,6 +461,9 @@ diese kleinen Testausschnitte ist noch nicht bestätigt.
 
 - **OFFEN:** Sind die 23 identischen Zeilen echte Mehrfachbuchungen 
 - **OFFEN:** stabile Buchungs-ID und Kostenartenstamm bereitstellen.
+- Lagerkosten werden aus der Kostenrechnung nur monatlich aktualisiert. Bei
+  offenen Aufträgen können daher später weitere Kosten entstehen; archivierte
+  Aufträge sollten keine neuen Kosten mehr erhalten.
 
 ---
 
@@ -548,6 +552,116 @@ diese kleinen Testausschnitte ist noch nicht bestätigt.
 
 ---
 
+## SRC-011 – Zuschlagssätze
+
+### Tabellenbeschreibung
+
+- **Datei:** `Zuschlaege.csv`
+- **Lokale Ablage:** `data/local/Komplett/CSV/Zuschlaege.csv`
+- **Logischer Tabellenname:** `surcharge_rate_history`
+- **Veröffentlichung:** Die konkreten Euro- und Prozentwerte bleiben lokal und
+  werden wegen ihrer geschäftlichen Vertraulichkeit nicht in Git versioniert.
+- **Technisches Format:** komma-getrennte CSV-Datei; deutsche Dezimalwerte sind
+  CSV-quotiert, Datumswerte liegen als `DD.MM.YYYY` vor.
+- **Tabellenkorn:** ein Zuschlagssatz je `Zuschlagsart`, `Stundensatz` und
+  Gültigkeitszeitraum.
+- **Zeitbezug:** Für die Auswahl des gültigen Satzes ist
+  `Auftragskopf.BelegDatum` maßgeblich. `GueltigVon` und `GueltigBis` gelten
+  einschließlich.
+
+### Felder
+
+| Physisches Feld | Vorgeschlagener logischer Name | Einheit/Format | Bestätigte Rolle und offene Definition |
+|---|---|---|---|
+| `Zuschlagsart` | `surcharge_type` | Code/Text | Beobachtet: `MatGemeinkosten`, `VVZuschlag`, `Nichtdefiniert`; `Nichtdefiniert` wird nicht verwendet|
+| `Stundensatz` | `rate_category` | Code `1`, `2` oder `4` | Trotz des Feldnamens technisch als Kennung beobachtet; es wird nur Stundensatz 2 verwendet |
+| `ZuschlagVariabel` | `variable_rate_percent` | Prozent | Prozentwert; Berechnungsbasis hängt von `Zuschlagsart` ab |
+| `ZuschlagFix` | `fixed_amount_eur` | EUR je Auftragskopf | fixer Verwaltungs-/Vertriebszuschlag aus `MatGemeinkosten` bei Stundensatzkennung `2`, einmal je Auftrag |
+| `GueltigVon` | `valid_from` | `DD.MM.YYYY` | erster eingeschlossener Gültigkeitstag |
+| `GueltigBis` | `valid_until` | `DD.MM.YYYY` | letzter eingeschlossener Gültigkeitstag |
+
+### Bestätigte Berechnungsgrundlagen
+
+#### Fixer Zuschlag
+
+```text
+Fixzuschlag je Auftrag = gültiger ZuschlagFix in EUR
+```
+
+Der Fixzuschlag wird einmal je Auftragskopf angewendet. Er ist kein Prozentsatz.
+
+#### Variabler VV-Zuschlag
+
+```text
+Produktionskostenbasis = Summe ProdZeiten.Kosten des Auftrags
+VV-Zuschlag             = Produktionskostenbasis × ZuschlagVariabel / 100
+```
+
+`ZuschlagVariabel` ist ein Prozentsatz. Produktionsmeldungen mit
+`ProdZeiten.Kosten = 0` tragen mit null zur Berechnungsbasis bei. Ein fehlender
+oder unvollständiger Produktionskostenexport darf nicht stillschweigend als
+vollständige Kostenbasis behandelt werden.
+
+#### Variable Materialgemeinkosten
+
+```text
+Materialwertbasis = RW_Buchungen.WertMat
+                    nur für RW_Buchungen.ArtikelGruppe in {01, 02, 03}
+
+Materialgemeinkosten = abs(Summe Materialwertbasis) × ZuschlagVariabel / 100
+```
+
+Andere Werte von `RW_Buchungen.ArtikelGruppe` sind von dieser Berechnungsbasis
+ausgeschlossen. Rückbuchungen und Korrekturen werden vor der Betragsbildung
+saldiert.
+
+### Technische und fachliche Prüfregeln
+
+- Für einen Auftrag muss der Satz über `Auftragskopf.BelegDatum` ausgewählt
+  werden.
+- Je benötigter Kombination aus Zuschlagsart und Stundensatzkennung darf für ein
+  Datum höchstens ein Gültigkeitsintervall zutreffen.
+- Fehlende oder überlappende Sätze werden als Daten-/Klärungsfall behandelt und
+  nicht automatisch mit null ersetzt.
+- `ZuschlagFix` wird als EUR und `ZuschlagVariabel` als Prozent interpretiert.
+- Es wird ausschließlich `Stundensatz = 2` verwendet; `Nichtdefiniert` wird
+  vollständig ignoriert.
+- Jeder Zuschlag wird unabhängig auf seiner eigenen Basis gerechnet; es gibt
+  keine Aufzinsung zwischen den Zuschlägen.
+- Jeder einzelne Zuschlag wird auf zwei Nachkommastellen gerundet.
+- Ungültige Datumsintervalle mit `GueltigBis < GueltigVon` dürfen nicht angewendet
+  werden. In der gelieferten Datei wurden drei solche Zeilen bei
+  `Zuschlagsart = Nichtdefiniert` beobachtet.
+
+### Kostenabstimmung und theoretische Sollkosten
+
+- Istmaterial wird artikelweise überschneidungsfrei bestimmt: Eine vorhandene
+  `RW_Buchungen`-Summe hat Vorrang; nur wenn für den exakten Artikel keine
+  RW-Buchung existiert, wird `Fertigungsmaterial.Materialwert` verwendet.
+- Die rekonstruierten Istkosten umfassen Material, `ProdZeiten.Kosten`,
+  Rechnungskontrollen, alle KTR-Buchungen und die drei Zuschläge.
+- Eine Abweichung zu `Auftragskopf.Kosten` wird nur dann gewarnt, wenn sie zugleich
+  mehr als 100 EUR und mehr als 2 Prozent beträgt. Kritisch gilt sie bei zugleich
+  mehr als 500 EUR und mehr als 5 Prozent.
+- `KTRBuchungenKI.TrKoArt = 250950` wird als Lagerkosten separat ausgewiesen.
+  Offene Aufträge können durch die monatliche Kostenrechnung nachträglich ergänzt
+  werden; archivierte Aufträge sollten stabil bleiben.
+- Für theoretische Rohwarenkosten gilt die positive Sollmenge aus `RohwarenPos`.
+  Der Preis wird zuerst aus der Netto-Mengen-/Wertsumme desselben Artikels und
+  nur ersatzweise aus derselben Artikelgruppe abgeleitet.
+- Theoretische Produktionskosten verwenden das 75. Perzentil der Leistung von
+  mindestens fünf Vergleichsaufträgen in der Reihenfolge gleiche WM und Maschine,
+  gleiche WS und Maschine, gleiche Maschine. Ohne Referenz oder Leistung bleibt
+  der Istwert bestehen.
+- Nachproduktionen, Produktionsmeldungen mit Mehraufwand und abgeschlossene,
+  fachlich als Datenfehler bewertete Aufträge werden aus der Idealreferenz
+  ausgeschlossen.
+- Ist das Ergebnis auch mit theoretischen Sollkosten nicht positiv, wird
+  `PREIS_KRITISCH` gesetzt. Fehlende Preiszuordnungen werden ausdrücklich als
+  unvollständig gekennzeichnet.
+
+---
+
 ## Bestätigte und verworfene Beziehungen
 
 | Kind/Feld | Eltern/Feld | Treffer auf Zeilenebene | Bewertung |
@@ -595,6 +709,10 @@ diese kleinen Testausschnitte ist noch nicht bestätigt.
     Artikel, Kunde, Lieferant, Vertreter, Kostenstelle und Kostenart?
 15. Dürfen Freitextfelder wie `Zusatztext`, `BuchungsText`, `NakaBem` und `Muster`
     für KI-Analysen verwendet werden, oder enthalten sie schützenswerte Inhalte?
+16. Welche fachliche Bedeutung hat `Zuschlaege.Stundensatz`, und wie wird die
+    Kennung einem Auftrag zugeordnet?
+17. Welche Vorzeichen-, Aggregations- und Rundungsregel gilt für die
+    Zuschlagsberechnungen?
 
 ## Freigabe
 

@@ -8,6 +8,7 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
+from .costing import assess_order_costs, ideal_profiles
 from .errors import AnalysisError
 
 
@@ -113,7 +114,12 @@ def _reconstructed_direct_costs(
     )
 
 
-def load_order_calculation(source_dir: Path, order_number: str) -> dict[str, object]:
+def load_order_calculation(
+    source_dir: Path,
+    order_number: str,
+    reference_dir: Path | None = None,
+    excluded_reference_orders: set[str] | None = None,
+) -> dict[str, object]:
     """Load one order without modifying any source file."""
     order = order_number.strip()
     if not ORDER_NUMBER.fullmatch(order):
@@ -156,10 +162,20 @@ def load_order_calculation(source_dir: Path, order_number: str) -> dict[str, obj
     direct_costs = _reconstructed_direct_costs(
         manufacturing, raw_bookings, invoice_controls, cost_bookings
     )
-    limitations = [
-        "Fixe und variable VV-/Materialzuschläge sind in den gelieferten CSV-Dateien nicht enthalten.",
-        "Lagerkosten und Palettenwerte sind nicht enthalten.",
-    ]
+    cost_assessment = assess_order_costs(
+        source,
+        header,
+        positions,
+        production,
+        manufacturing,
+        raw_positions,
+        raw_bookings,
+        invoice_controls,
+        cost_bookings,
+        reference_dir,
+        ideal_profiles(reference_dir or source, excluded_reference_orders),
+    )
+    limitations = []
     if production and not production_detail_available:
         limitations.append(
             "ProdZeiten.Kosten enthält für diesen Auftrag ausschließlich 0. "
@@ -190,6 +206,7 @@ def load_order_calculation(source_dir: Path, order_number: str) -> dict[str, obj
         "production_detail_available": production_detail_available,
         "production_cost_from_rows": _source_total(production, "Kosten"),
         "reconstructed_direct_costs": direct_costs,
+        "cost_assessment": cost_assessment,
         "source_totals": {
             "manufacturing_material": _source_total(manufacturing, "Materialwert"),
             "raw_bookings": _source_total(raw_bookings, "WertMat"),

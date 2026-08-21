@@ -145,6 +145,27 @@ class PerformanceTests(unittest.TestCase):
         self.assertTrue(rows[0]["handwork_present"])
         self.assertNotIn("HANDARBEIT_MIT_AUSSERGEWOEHNLICHEM_AUFWAND", rows[0]["reason_codes"])
 
+    def test_negative_afterproduction_is_released_but_remains_labelled(self) -> None:
+        write_csv(
+            self.scoring / "Auftragskopf.csv",
+            ["BelegDatum", "BelegKopfKey", "Kunde Key", "BelegNummer", "X_ArtikelGruppe", "Erlöse", "Kosten", "Zusatztext"],
+            [["01.01.2026", "KS1", "C1", "S1", "PG", 1000, 1800, "Nachprod Reklamation"]],
+        )
+        write_csv(
+            self.scoring / "ProdZeiten.csv",
+            ["Auftrag", "DauerMaschine", "Dauer", "Mehraufwand Id", "ARVOKurz", "Stufe"],
+            [["S1", 10, "", "", "PRODUKTION", "DRUCK"]],
+        )
+
+        rows, _ = analyze_performance(
+            self.reference, self.scoring, self.parameters, self.customers, "test"
+        )
+
+        self.assertEqual("AKZEPTIERTE_AUSNAHME_NACHPRODUKTION", rows[0]["performance_status"])
+        self.assertTrue(rows[0]["negative_result_exception"])
+        self.assertFalse(rows[0]["manual_review_required"])
+        self.assertIn("NACHPRODUKTION_ERKANNT", rows[0]["reason_codes"])
+
     def test_invalid_minimum_peer_group_size_is_rejected(self) -> None:
         content = json.loads(self.parameters.read_text(encoding="utf-8"))
         content["performance"]["minimum_peer_group_size"] = 2

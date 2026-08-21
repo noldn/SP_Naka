@@ -21,6 +21,27 @@ Wesentliche Änderungen werden hier in umgekehrt chronologischer Reihenfolge erf
 
 ### Hinzugefügt
 
+- Version 0.8.0: vollständige Istkostenabstimmung mit Produktionskosten,
+  überschneidungsfreier Materialbewertung, Rechnungskontrollen, KORE-/Lagerkosten
+  und den zum Belegdatum gültigen Material-, VV- und Fixzuschlägen. Abweichungen
+  werden ab 100 EUR und 2 Prozent gewarnt beziehungsweise ab 500 EUR und
+  5 Prozent kritisch markiert.
+- Theoretische Sollkosten aus Rohwaren-Sollmengen, artikelgenauen Istpreisen und
+  einer Idealleistung auf dem 75. Perzentil von mindestens fünf Vergleichsaufträgen.
+  Die Referenzhierarchie lautet gleiche WM, gleiche WS, gleiche Maschine; danach
+  bleibt der Istwert bestehen. Nachproduktionen, Mehraufwand und bestätigte
+  Datenfehler werden aus der Leistungsreferenz ausgeschlossen.
+- Zusatztexte mit `nachprod` werden als Nachproduktion gekennzeichnet. Ein
+  negatives Ergebnis wird als erwartbare Ausnahme freigegeben; unabhängige
+  Material-, Produktions- oder Datenhinweise bleiben prüfpflichtig.
+- Die Auftrags- und Prüflisten enthalten Kostenabstimmung, theoretisches Ergebnis
+  und den Hinweis `PREIS_KRITISCH`, wenn ein Auftrag auch theoretisch nicht
+  positiv hätte werden können.
+- Datenkatalog um die lokale, zeitabhängige Zuschlagstabelle ergänzt. Dokumentiert
+  sind Fixbetrag in EUR, variable Prozentsätze, VV-Basis aus
+  `ProdZeiten.Kosten`, Materialbasis aus `RW_Buchungen.WertMat` für die
+  Artikelgruppen `01`, `02`, `03` sowie noch offene Zuordnungs- und
+  Vorzeichenregeln; konkrete Zuschlagswerte bleiben lokal.
 - Die Nachkalkulation zeigt je Produktionsabteilung/-stufe die Leistung als
   gemeldete Gesamtmenge geteilt durch die gemeldete Gesamtzeit.
 - Version 0.7.0: gemeinsame Bewertungs- und Klärungsmaske in der

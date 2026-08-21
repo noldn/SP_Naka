@@ -19,6 +19,12 @@ from .csv_io import (
     write_json,
 )
 from .errors import AnalysisError
+from .costing import (
+    COST_FIELDS,
+    COST_REQUIRED_FILES,
+    analyze_costs,
+    cost_sources_available,
+)
 from .models import OrderAssessment, RuleResult
 from .performance import (
     EXPECTED_RESULT_FIELDS,
@@ -181,6 +187,7 @@ def run_analysis(
     reference_data_dir: Path | None = None,
     analysis_parameters_path: Path | None = None,
     accepted_customers_path: Path | None = None,
+    order_clarifications_path: Path | None = None,
 ) -> Path:
     started = datetime.now(timezone.utc)
     source_dir = resolve_source_dir(data_dir)
@@ -238,6 +245,14 @@ def run_analysis(
             effective_run_id,
         )
 
+    cost_results: list[dict[str, object]] = []
+    cost_summary: dict[str, object] | None = None
+    if cost_sources_available(source_dir):
+        cost_reference_dir = reference_dir or resolve_source_dir(reference_data_dir or source_dir)
+        cost_results, cost_summary = analyze_costs(
+            source_dir, cost_reference_dir, effective_run_id, order_clarifications_path
+        )
+
     deviations = [item for item in rule_results if item.status == "ABWEICHUNG"]
     completed = datetime.now(timezone.utc)
     status_counts = Counter(item.overall_status for item in assessments)
@@ -247,6 +262,8 @@ def run_analysis(
     used_source_names = set(REQUIRED_COLUMNS)
     if performance_summary is not None:
         used_source_names.update(available_performance_files(source_dir))
+    if cost_summary is not None:
+        used_source_names.update(COST_REQUIRED_FILES)
     source_files = {
         file_name: {
             "rows": row_counts.get(file_name) or sum(1 for _ in read_rows(source_dir, file_name)),
@@ -282,6 +299,9 @@ def run_analysis(
             "accepted_customers_file": (
                 str(accepted_customers_path.resolve()) if accepted_customers_path else None
             ),
+            "order_clarifications_file": (
+                str(order_clarifications_path.resolve()) if order_clarifications_path else None
+            ),
             "performance_parameters_sha256": (
                 sha256_file(analysis_parameters_path) if analysis_parameters_path else None
             ),
@@ -302,6 +322,9 @@ def run_analysis(
             "performance_reviews_created": sum(
                 1 for item in performance_results if item["manual_review_required"]
             ),
+            "cost_reviews_created": sum(
+                1 for item in cost_results if item["manual_review_required"]
+            ),
             "order_status_counts": dict(sorted(status_counts.items())),
             "rule_status_counts": {
                 rule_id: dict(sorted(counts.items()))
@@ -311,6 +334,7 @@ def run_analysis(
         "source_files": source_files,
         "reference_files": reference_files,
         "performance_analysis": performance_summary,
+        "cost_analysis": cost_summary,
         "result_status": "COMPLETED",
     }
     temporary_run_dir.mkdir(parents=True)
@@ -388,6 +412,12 @@ def run_analysis(
                     }
                     for item in performance_results
                 ),
+            )
+        if cost_results:
+            write_csv(
+                temporary_run_dir / "cost_assessments.csv",
+                COST_FIELDS,
+                cost_results,
             )
         write_json(temporary_run_dir / "run_manifest.json", manifest)
         temporary_run_dir.replace(run_dir)

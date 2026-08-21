@@ -95,8 +95,14 @@ class WebApplicationTests(unittest.TestCase):
     def _configure_order_source(self, order: str = "100") -> Path:
         source = self.root / "training"
         (source / "Auftragskopf.csv").write_text(
-            "BelegNummer,BelegKopfKey,Erlöse,Kosten,Zusatztext,NakaOK,NakaBem,Status\n"
-            f"{order},K-{order},100,120,Testauftrag,JA,Fachlich kommentiert,ERLEDIGT\n",
+            "BelegNummer,BelegKopfKey,BelegDatum,Erlöse,Kosten,Zusatztext,NakaOK,NakaBem,Status\n"
+            f"{order},K-{order},01.01.2024,100,120,Testauftrag,JA,Fachlich kommentiert,ERLEDIGT\n",
+            encoding="utf-8-sig",
+        )
+        (source / "Zuschlaege.csv").write_text(
+            "Zuschlagsart,Stundensatz,ZuschlagVariabel,ZuschlagFix,GueltigVon,GueltigBis\n"
+            "MatGemeinkosten,2,20,100,01.01.2020,31.12.2099\n"
+            "VVZuschlag,2,10,0,01.01.2020,31.12.2099\n",
             encoding="utf-8-sig",
         )
         config = self.app.config()
