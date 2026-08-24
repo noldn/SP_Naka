@@ -536,12 +536,16 @@ def _data_table(
     rows: list[dict[str, object]] | list[dict[str, str]],
     columns: tuple[tuple[str, str], ...],
     empty: str = "Keine Daten vorhanden",
+    bold_fields: frozenset[str] = frozenset(),
+    footer: dict[str, object] | None = None,
 ) -> str:
     head = "".join(f"<th>{html.escape(label)}</th>" for label, _ in columns)
     body = "".join(
         "<tr>"
         + "".join(
-            f"<td>{html.escape(str(row.get(field, '') or ''))}</td>"
+            f"<td>{'<strong>' if field in bold_fields else ''}"
+            f"{html.escape(str(row.get(field, '') or ''))}"
+            f"{'</strong>' if field in bold_fields else ''}</td>"
             for _, field in columns
         )
         + "</tr>"
@@ -549,6 +553,11 @@ def _data_table(
     )
     if not body:
         body = f'<tr><td colspan="{len(columns)}">{html.escape(empty)}</td></tr>'
+    if footer is not None:
+        body += '<tr class="table-total">' + "".join(
+            f"<th>{html.escape(str(footer.get(field, '') or ''))}</th>"
+            for _, field in columns
+        ) + "</tr>"
     return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
 
 
@@ -637,15 +646,28 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
             ("Leistung (Menge/Gesamtzeit)", "performance_display"),
             ("Kosten", "cost_display"), ("Mehraufwand", "extra_effort_entries"),
         ),
+        bold_fields=frozenset({"cost_display"}),
+        footer={
+            "stage": "Summe Produktionskosten",
+            "cost_display": _optional_number(cost_assessment["production_cost"], "money"),
+        },
     )
+    for row in calculation["production"]:
+        row["cost_display"] = _optional_number(row.get("Kosten"), "money")
     production_details = _data_table(
         calculation["production"],
         (
             ("Datum", "Datum"), ("Stufe", "Stufe"), ("Kostenstelle", "KSTKurz"),
             ("Arbeitsvorgang", "ARVOKurz"), ("AZ", "Dauer"),
             ("MF", "DauerMaschine"), ("MH", "DauerMF"),
-            ("Menge", "Menge"), ("Mehraufwand", "Mehraufwand Id"),
+            ("Menge", "Menge"), ("Kosten", "cost_display"),
+            ("Mehraufwand", "Mehraufwand Id"),
         ),
+        bold_fields=frozenset({"cost_display"}),
+        footer={
+            "Stufe": "Summe Produktionskosten",
+            "cost_display": _optional_number(cost_assessment["production_cost"], "money"),
+        },
     )
 
     individual_rows: list[dict[str, object]] = []
@@ -685,6 +707,11 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
             ("Bezeichnung", "description"), ("Gruppe", "group"),
             ("Menge", "quantity"), ("EH", "unit"), ("Kostenwirkung", "value"),
         ),
+        bold_fields=frozenset({"value"}),
+        footer={
+            "source": "Summe Einzelkosten",
+            "value": _optional_number(cost_assessment["individual_cost"], "money"),
+        },
     )
 
     vv_total = cost_assessment["vv_surcharge"] + cost_assessment["fixed_surcharge"]

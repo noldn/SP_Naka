@@ -110,6 +110,11 @@ class WebApplicationTests(unittest.TestCase):
             f"{order},RAW-1,01,1,250\n",
             encoding="utf-8-sig",
         )
+        (source / "ProdZeiten.csv").write_text(
+            "Auftrag,Stufe,Dauer,DauerMaschine,DauerMF,Menge,Kosten,Mehraufwand Id\n"
+            f"{order},DRUCK,1,1,1,10,12.3456,\n",
+            encoding="utf-8-sig",
+        )
         config = self.app.config()
         config["reference_data_dir"] = str(source)
         self.app._save_config(config)
@@ -159,6 +164,10 @@ class WebApplicationTests(unittest.TestCase):
         self.assertIn("Gesamtkosten (netto)", page)
         self.assertIn("VV-Zuschlag (variabel + fix)", page)
         self.assertNotIn("davon Lagerkosten", page)
+        self.assertIn("Summe Produktionskosten", page)
+        self.assertIn("Summe Einzelkosten", page)
+        self.assertIn("<strong>12,35 EUR</strong>", page)
+        self.assertIn("<strong>-250,00 EUR</strong>", page)
 
 
 if __name__ == "__main__":

@@ -35,6 +35,10 @@ Wesentliche Änderungen werden hier in umgekehrt chronologischer Reihenfolge erf
 
 ### Hinzugefügt
 
+- Auftragspositionen werden in der Nachkalkulation numerisch nach
+  `PositionsNr` sortiert. Kostenwerte in Produktionsleistungen/-zeiten und den
+  gelieferten Einzelkostenquellen sind fett hervorgehoben; beide Bereiche
+  schließen mit einer fachlich passenden Kostensumme ab.
 - Version 0.8.0: vollständige Istkostenabstimmung mit Produktionskosten,
   überschneidungsfreier Materialbewertung, Rechnungskontrollen, KORE-/Lagerkosten
   und den zum Belegdatum gültigen Material-, VV- und Fixzuschlägen. Abweichungen

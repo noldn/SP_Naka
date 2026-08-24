@@ -84,6 +84,21 @@ class NachkalkulationTests(unittest.TestCase):
 
         self.assertIsNone(result["production_summary"][0]["performance"])
 
+    def test_sales_positions_are_sorted_numerically(self) -> None:
+        write_csv(
+            self.root / "VertriebsPositionen.csv",
+            ["BelegKopfKey", "PositionsNr", "Artikel", "Menge"],
+            [
+                ["K100", "10", "V10", "1"],
+                ["K100", "2", "V2", "1"],
+                ["K100", "1", "V1", "1"],
+            ],
+        )
+
+        result = load_order_calculation(self.root, "100")
+
+        self.assertEqual(["1", "2", "10"], [row["PositionsNr"] for row in result["positions"]])
+
     def test_invalid_order_number_is_rejected(self) -> None:
         with self.assertRaisesRegex(AnalysisError, "unzulässige Zeichen"):
             load_order_calculation(self.root, "../100")

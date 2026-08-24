@@ -43,6 +43,12 @@ def _source_total(rows: list[dict[str, str]], field: str) -> float:
     return sum(abs(value) for row in rows if (value := number(row.get(field))) is not None)
 
 
+def _position_sort_key(row: dict[str, str]) -> tuple[bool, float, str]:
+    text = (row.get("PositionsNr") or "").strip()
+    parsed = number(text)
+    return parsed is None, parsed if parsed is not None else math.inf, text.casefold()
+
+
 def _production_summary(rows: list[dict[str, str]]) -> list[dict[str, object]]:
     grouped: dict[str, dict[str, object]] = {}
     for row in rows:
@@ -136,7 +142,10 @@ def load_order_calculation(
     header = headers[0]
     header_key = (header.get("BelegKopfKey") or "").strip()
 
-    positions = _rows(source / "VertriebsPositionen.csv", "BelegKopfKey", header_key)
+    positions = sorted(
+        _rows(source / "VertriebsPositionen.csv", "BelegKopfKey", header_key),
+        key=_position_sort_key,
+    )
     planning = _rows(source / "Planung.csv", "AuftragNr", order)
     production = _rows(source / "ProdZeiten.csv", "Auftrag", order)
     manufacturing = _rows(source / "Fertigungsmaterial.csv", "Auftrag", order)
