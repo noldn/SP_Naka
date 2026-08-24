@@ -101,8 +101,13 @@ class WebApplicationTests(unittest.TestCase):
         )
         (source / "Zuschlaege.csv").write_text(
             "Zuschlagsart,Stundensatz,ZuschlagVariabel,ZuschlagFix,GueltigVon,GueltigBis\n"
-            "MatGemeinkosten,2,20,100,01.01.2020,31.12.2099\n"
-            "VVZuschlag,2,10,0,01.01.2020,31.12.2099\n",
+            "MatGemeinkosten,2,20,0,01.01.2020,31.12.2099\n"
+            "VVZuschlag,2,10,100,01.01.2020,31.12.2099\n",
+            encoding="utf-8-sig",
+        )
+        (source / "RW_Buchungen.csv").write_text(
+            "BelegNummer,Artikel,ArtikelGruppe,Menge,WertMat\n"
+            f"{order},RAW-1,01,1,250\n",
             encoding="utf-8-sig",
         )
         config = self.app.config()
@@ -150,6 +155,10 @@ class WebApplicationTests(unittest.TestCase):
         self.assertIn("Noch nicht berechnet", page)
         self.assertIn("Fachlich kommentiert", page)
         self.assertIn("ERLEDIGT", page)
+        self.assertIn("-250,00 EUR", page)
+        self.assertIn("Gesamtkosten (netto)", page)
+        self.assertIn("VV-Zuschlag (variabel + fix)", page)
+        self.assertNotIn("davon Lagerkosten", page)
 
 
 if __name__ == "__main__":

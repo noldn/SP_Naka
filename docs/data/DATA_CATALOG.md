@@ -576,7 +576,7 @@ diese kleinen Testausschnitte ist noch nicht bestätigt.
 | `Zuschlagsart` | `surcharge_type` | Code/Text | Beobachtet: `MatGemeinkosten`, `VVZuschlag`, `Nichtdefiniert`; `Nichtdefiniert` wird nicht verwendet|
 | `Stundensatz` | `rate_category` | Code `1`, `2` oder `4` | Trotz des Feldnamens technisch als Kennung beobachtet; es wird nur Stundensatz 2 verwendet |
 | `ZuschlagVariabel` | `variable_rate_percent` | Prozent | Prozentwert; Berechnungsbasis hängt von `Zuschlagsart` ab |
-| `ZuschlagFix` | `fixed_amount_eur` | EUR je Auftragskopf | fixer Verwaltungs-/Vertriebszuschlag aus `MatGemeinkosten` bei Stundensatzkennung `2`, einmal je Auftrag |
+| `ZuschlagFix` | `fixed_amount_eur` | EUR je Auftragskopf | fixer Verwaltungs-/Vertriebszuschlag aus `VVZuschlag` bei Stundensatzkennung `2`, einmal je Auftrag |
 | `GueltigVon` | `valid_from` | `DD.MM.YYYY` | erster eingeschlossener Gültigkeitstag |
 | `GueltigBis` | `valid_until` | `DD.MM.YYYY` | letzter eingeschlossener Gültigkeitstag |
 
@@ -585,7 +585,7 @@ diese kleinen Testausschnitte ist noch nicht bestätigt.
 #### Fixer Zuschlag
 
 ```text
-Fixzuschlag je Auftrag = gültiger ZuschlagFix in EUR
+Fixzuschlag je Auftrag = gültiger VVZuschlag.ZuschlagFix in EUR
 ```
 
 Der Fixzuschlag wird einmal je Auftragskopf angewendet. Er ist kein Prozentsatz.
@@ -638,11 +638,19 @@ saldiert.
 - Istmaterial wird artikelweise überschneidungsfrei bestimmt: Eine vorhandene
   `RW_Buchungen`-Summe hat Vorrang; nur wenn für den exakten Artikel keine
   RW-Buchung existiert, wird `Fertigungsmaterial.Materialwert` verwendet.
+- Für die Kostenwirkung der RW-Buchungen wird das Vorzeichen von `WertMat`
+  umgedreht: negativer Verbrauch erzeugt positive Kosten, eine positive
+  Rückbuchung beziehungsweise Korrektur reduziert diese Kosten. Eine
+  Betragsbildung je Einzelzeile ist unzulässig.
 - Die rekonstruierten Istkosten umfassen Material, `ProdZeiten.Kosten`,
   Rechnungskontrollen, alle KTR-Buchungen und die drei Zuschläge.
 - Eine Abweichung zu `Auftragskopf.Kosten` wird nur dann gewarnt, wenn sie zugleich
   mehr als 100 EUR und mehr als 2 Prozent beträgt. Kritisch gilt sie bei zugleich
   mehr als 500 EUR und mehr als 5 Prozent.
+- Quellwerte und Zwischensummen werden ohne vorzeitige Rundung weitergerechnet.
+  Die Webanzeige formatiert Werte einheitlich mit zwei Nachkommastellen. Nur die
+  fachlich bestätigten Einzelzuschläge werden bereits bei ihrer Berechnung auf
+  zwei Nachkommastellen gerundet.
 - `KTRBuchungenKI.TrKoArt = 250950` wird als Lagerkosten separat ausgewiesen.
   Offene Aufträge können durch die monatliche Kostenrechnung nachträglich ergänzt
   werden; archivierte Aufträge sollten stabil bleiben.
@@ -712,10 +720,6 @@ saldiert.
     Artikel, Kunde, Lieferant, Vertreter, Kostenstelle und Kostenart?
 15. Dürfen Freitextfelder wie `Zusatztext`, `BuchungsText`, `NakaBem` und `Muster`
     für KI-Analysen verwendet werden, oder enthalten sie schützenswerte Inhalte?
-16. Welche fachliche Bedeutung hat `Zuschlaege.Stundensatz`, und wie wird die
-    Kennung einem Auftrag zugeordnet?
-17. Welche Vorzeichen-, Aggregations- und Rundungsregel gilt für die
-    Zuschlagsberechnungen?
 
 ## Freigabe
 

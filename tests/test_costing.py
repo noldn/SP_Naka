@@ -23,8 +23,8 @@ class CostingTests(unittest.TestCase):
             self.root / "Zuschlaege.csv",
             ["Zuschlagsart", "Stundensatz", "ZuschlagVariabel", "ZuschlagFix", "GueltigVon", "GueltigBis"],
             [
-                ["MatGemeinkosten", "2", "20", "100", "01.01.2020", "31.12.2099"],
-                ["VVZuschlag", "2", "10", "0", "01.01.2020", "31.12.2099"],
+                ["MatGemeinkosten", "2", "20", "0", "01.01.2020", "31.12.2099"],
+                ["VVZuschlag", "2", "10", "100", "01.01.2020", "31.12.2099"],
                 ["Nichtdefiniert", "2", "99", "999", "01.01.2020", "31.12.2099"],
             ],
         )
@@ -96,7 +96,7 @@ class CostingTests(unittest.TestCase):
         detail = result["theoretical_production_details"][0]
         self.assertEqual(70.0, detail["ideal_performance"])
         self.assertEqual("SAME_WM_MACHINE_STAGE", detail["reference_level"])
-        self.assertEqual(142.86, detail["theoretical_cost"])
+        self.assertAlmostEqual(142.85714285714286, detail["theoretical_cost"])
 
     def test_group_alternative_is_not_counted_again_as_actual_material(self) -> None:
         result = assess_order_costs(
@@ -111,6 +111,20 @@ class CostingTests(unittest.TestCase):
         self.assertEqual(50.0, result["theoretical_material_cost"])
         detail = result["theoretical_material_details"][0]
         self.assertEqual("ARTICLE_GROUP_ALTERNATIVE", detail["match_level"])
+
+    def test_positive_raw_correction_reduces_actual_cost(self) -> None:
+        result = assess_order_costs(
+            self.root,
+            {"BelegNummer": "100", "BelegDatum": "01.01.2024", "Erlöse": "1000", "Kosten": "100"},
+            [], [], [], [],
+            [
+                {"Artikel": "RAW", "ArtikelGruppe": "01", "Menge": "-100", "WertMat": "-100"},
+                {"Artikel": "RAW", "ArtikelGruppe": "01", "Menge": "120", "WertMat": "120"},
+            ],
+            [], [], self.root, {},
+        )
+
+        self.assertEqual(-20.0, result["actual_material_cost"])
 
 
 if __name__ == "__main__":

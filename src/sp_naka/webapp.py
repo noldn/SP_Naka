@@ -657,7 +657,10 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
         })
     for row in calculation["raw_bookings"]:
         parsed_value = parse_number(row.get("WertMat"))
-        value = abs(parsed_value) if parsed_value is not None else None
+        # RW-Verbrauch ist in der Quelle negativ und wird als positive
+        # Kostenwirkung gezeigt; eine positive Korrekturbuchung entsprechend
+        # als negative Kostenwirkung.
+        value = -parsed_value if parsed_value is not None else None
         individual_rows.append({
             "source": "RW-Buchung", "date": row.get("BuchungsDatum", ""), "article": row.get("Artikel", ""),
             "description": row.get("Sorte", ""), "group": row.get("ArtikelGruppeBez", ""),
@@ -680,28 +683,33 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
         (
             ("Quelle", "source"), ("Datum", "date"), ("Artikel", "article"),
             ("Bezeichnung", "description"), ("Gruppe", "group"),
-            ("Menge", "quantity"), ("EH", "unit"), ("Wert", "value"),
+            ("Menge", "quantity"), ("EH", "unit"), ("Kostenwirkung", "value"),
         ),
     )
 
-    totals = calculation["source_totals"]
-    source_rows = [
-        {"label": "Material Ist (RW je Artikel, FM als Fallback)", "value": _optional_number(cost_assessment["actual_material_cost"], "money")},
-        {"label": "davon Rohmaterial 01/02/03", "value": _optional_number(cost_assessment["actual_raw_material_cost"], "money")},
-        {"label": "Produktionskosten aus ProdZeiten", "value": _optional_number(cost_assessment["production_cost"], "money")},
-        {"label": "Rechnungskontrollen", "value": _optional_number(totals["invoice_controls"], "money")},
-        {"label": "KORE-Buchungen gesamt", "value": _optional_number(cost_assessment["ktr_cost"], "money")},
-        {"label": "davon Lagerkosten", "value": _optional_number(cost_assessment["lager_cost"], "money")},
-        {"label": "davon Fracht", "value": _optional_number(cost_assessment["freight_cost"], "money")},
-        {"label": f"Materialgemeinkosten ({_optional_number(cost_assessment['material_surcharge_rate'])} %)", "value": _optional_number(cost_assessment["material_surcharge"], "money")},
-        {"label": f"VV-Zuschlag ({_optional_number(cost_assessment['vv_surcharge_rate'])} %)", "value": _optional_number(cost_assessment["vv_surcharge"], "money")},
-        {"label": "Fixer Verwaltungs-/Vertriebszuschlag", "value": _optional_number(cost_assessment["fixed_surcharge"], "money")},
-        {"label": "Rekonstruierte Istkosten", "value": _optional_number(cost_assessment["reconstructed_cost"], "money")},
-        {"label": "Offizielle Kosten Auftragskopf", "value": _optional_number(cost_assessment["official_cost"], "money")},
-        {"label": f"Differenz ({cost_assessment['reconciliation_status']})", "value": f"{_optional_number(cost_assessment['reconciliation_difference'], 'money')} / {_optional_number(cost_assessment['reconciliation_difference_rate'], 'ratio')}"},
-    ]
+    vv_total = cost_assessment["vv_surcharge"] + cost_assessment["fixed_surcharge"]
+    cost_rows = (
+        ("Produktionskosten", cost_assessment["production_cost"], False),
+        ("Einzelkosten", cost_assessment["individual_cost"], False),
+        ("Gesamtkosten (netto)", cost_assessment["net_cost"], True),
+        ("VV-Zuschlag (variabel + fix)", vv_total, False),
+        ("Materialzuschlag", cost_assessment["material_surcharge"], False),
+        ("Gesamtkosten", cost_assessment["reconstructed_cost"], True),
+    )
+    cost_body = "".join(
+        f"<tr><{'th' if bold else 'td'}>{html.escape(label)}</{'th' if bold else 'td'}>"
+        f"<{'th' if bold else 'td'}>{html.escape(_optional_number(value, 'money'))}</{'th' if bold else 'td'}></tr>"
+        for label, value, bold in cost_rows
+    )
+    cost_body += '<tr aria-hidden="true"><td colspan="2">&nbsp;</td></tr>'
+    cost_body += (
+        f"<tr><td>Kosten Auftragskopf</td><td>{html.escape(_optional_number(cost_assessment['official_cost'], 'money'))}</td></tr>"
+        f"<tr><td>Differenz ({html.escape(str(cost_assessment['reconciliation_status']))})</td>"
+        f"<td>{html.escape(_optional_number(cost_assessment['reconciliation_difference'], 'money'))} / "
+        f"{html.escape(_optional_number(cost_assessment['reconciliation_difference_rate'], 'ratio'))}</td></tr>"
+    )
     limitations = "".join(f"<li>{html.escape(str(value))}</li>" for value in calculation["limitations"])
-    cost_sources = _data_table(source_rows, (("Kostenquelle", "label"), ("Betrag/Status", "value"))) + f'<ul class="limitations">{limitations}</ul>'
+    cost_sources = f'<table><thead><tr><th>Kostenblock</th><th>Betrag</th></tr></thead><tbody>{cost_body}</tbody></table>' + f'<ul class="limitations">{limitations}</ul>'
 
     theory_rows = [
         {"label": "Material mit Sollmengen", "actual": _optional_number(cost_assessment["actual_material_cost"], "money"), "theory": _optional_number(cost_assessment["theoretical_material_cost"], "money")},

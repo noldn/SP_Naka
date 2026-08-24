@@ -54,8 +54,8 @@ class NachkalkulationTests(unittest.TestCase):
             self.root / "Zuschlaege.csv",
             ["Zuschlagsart", "Stundensatz", "ZuschlagVariabel", "ZuschlagFix", "GueltigVon", "GueltigBis"],
             [
-                ["MatGemeinkosten", "2", "20", "100", "01.01.2020", "31.12.2099"],
-                ["VVZuschlag", "2", "10", "0", "01.01.2020", "31.12.2099"],
+                ["MatGemeinkosten", "2", "20", "0", "01.01.2020", "31.12.2099"],
+                ["VVZuschlag", "2", "10", "100", "01.01.2020", "31.12.2099"],
             ],
         )
 

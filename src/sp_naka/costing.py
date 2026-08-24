@@ -26,7 +26,8 @@ COST_FIELDS = [
     "run_id", "order_number", "reconciliation_status", "official_cost_eur",
     "reconstructed_cost_eur", "reconciliation_difference_eur",
     "reconciliation_difference_rate", "actual_material_cost_eur",
-    "production_cost_eur", "invoice_cost_eur", "ktr_cost_eur", "lager_cost_eur",
+    "production_cost_eur", "individual_cost_eur", "net_cost_eur",
+    "invoice_cost_eur", "ktr_cost_eur", "lager_cost_eur",
     "material_surcharge_eur", "vv_surcharge_eur", "fixed_surcharge_eur",
     "theoretical_invoice_cost_eur",
     "theoretical_total_cost_eur", "theoretical_result_eur", "theoretical_complete",
@@ -130,7 +131,7 @@ def load_surcharges(source_dir: Path, observed: date | None) -> dict[str, float 
     material = selected["MatGemeinkosten"]
     vv = selected["VVZuschlag"]
     material_rate = _number(material.get("ZuschlagVariabel"))
-    fixed = _number(material.get("ZuschlagFix"))
+    fixed = _number(vv.get("ZuschlagFix"))
     vv_rate = _number(vv.get("ZuschlagVariabel"))
     if material_rate is None or fixed is None or vv_rate is None:
         raise AnalysisError(f"{path.name}: Zuschlagswert ist nicht numerisch.")
@@ -164,7 +165,10 @@ def _actual_material(
             rw[article] += value
             rw_groups[article] = _group(row)
     costs = {
-        article: abs(rw[article]) if article in rw else max(fm[article], 0.0)
+        # RW-Verbräuche werden negativ, Rückbuchungen/Korrekturen positiv
+        # geliefert. Für die Kostenwirkung wird deshalb das Vorzeichen einmal
+        # umgedreht; abs() würde Korrekturen fälschlich zu Kosten addieren.
+        article: -rw[article] if article in rw else max(fm[article], 0.0)
         for article in set(fm).union(rw)
     }
     groups = {**fm_groups, **rw_groups}
@@ -177,7 +181,7 @@ def _actual_material(
             if _group(row) in RAW_GROUPS
         )
     )
-    return _round(sum(costs.values())), _round(raw_actual), _round(other_actual), costs, {
+    return sum(costs.values()), raw_actual, other_actual, costs, {
         article: float(value) for article, value in rw.items()
     } | {"__eligible_base__": eligible_base}
 
@@ -260,7 +264,7 @@ def _theoretical_material(
             "planned_quantity": quantity,
             "unit_price": price,
             "match_level": match,
-            "theoretical_cost": _round(cost),
+            "theoretical_cost": cost,
         })
 
     # Materials not represented by a raw-material target remain at actual cost.
@@ -269,10 +273,10 @@ def _theoretical_material(
         if article not in used_planned and article not in consumed_actual_articles:
             actual_other += cost
     return {
-        "raw_cost": _round(raw_total),
-        "other_actual_cost": _round(actual_other),
-        "total": _round(raw_total + actual_other),
-        "eligible_base": _round(eligible_total),
+        "raw_cost": raw_total,
+        "other_actual_cost": actual_other,
+        "total": raw_total + actual_other,
+        "eligible_base": eligible_total,
         "complete": not missing,
         "missing_articles": missing,
         "details": details,
@@ -429,11 +433,11 @@ def _theoretical_production(
             "reference_level": reference_level,
             "reference_count": len(reference_values),
             "ideal_performance": ideal,
-            "theoretical_duration": _round(ideal_duration),
-            "actual_cost": _round(actual_cost),
-            "theoretical_cost": _round(theoretical_cost),
+            "theoretical_duration": ideal_duration,
+            "actual_cost": actual_cost,
+            "theoretical_cost": theoretical_cost,
         })
-    return {"actual": _round(actual_total), "theoretical": _round(theoretical_total), "details": details}
+    return {"actual": actual_total, "theoretical": theoretical_total, "details": details}
 
 
 def assess_order_costs(
@@ -457,17 +461,19 @@ def assess_order_costs(
         manufacturing, raw_bookings
     )
     eligible_actual = float(rw_values.pop("__eligible_base__", 0.0))
-    production_cost = _round(_net(production, "Kosten"))
-    invoice_cost = _round(_positive_cost(invoice_controls, "WarenwertEUR"))
-    ktr_cost = _round(_net(cost_bookings, "Betrag"))
-    lager_cost = _round(_net([r for r in cost_bookings if (r.get("TrKoArt") or "").strip() == LAGER_COST_TYPE], "Betrag"))
-    freight_cost = _round(_net([r for r in cost_bookings if (r.get("TrKoArt") or "").strip() in FREIGHT_COST_TYPES], "Betrag"))
-    other_ktr = _round(ktr_cost - lager_cost - freight_cost)
+    production_cost = _net(production, "Kosten")
+    invoice_cost = _positive_cost(invoice_controls, "WarenwertEUR")
+    ktr_cost = _net(cost_bookings, "Betrag")
+    lager_cost = _net([r for r in cost_bookings if (r.get("TrKoArt") or "").strip() == LAGER_COST_TYPE], "Betrag")
+    freight_cost = _net([r for r in cost_bookings if (r.get("TrKoArt") or "").strip() in FREIGHT_COST_TYPES], "Betrag")
+    other_ktr = ktr_cost - lager_cost - freight_cost
     fixed = _round(float(rates["fixed"]))
     material_surcharge = _round(eligible_actual * float(rates["material_rate"]) / 100.0)
     vv_surcharge = _round(production_cost * float(rates["vv_rate"]) / 100.0)
-    reconstructed = _round(material + production_cost + invoice_cost + ktr_cost + fixed + material_surcharge + vv_surcharge)
-    difference = _round(reconstructed - official) if official is not None else None
+    individual_cost = material + invoice_cost + ktr_cost
+    net_cost = production_cost + individual_cost
+    reconstructed = net_cost + fixed + material_surcharge + vv_surcharge
+    difference = reconstructed - official if official is not None else None
     difference_rate = abs(difference) / abs(official) if difference is not None and official not in (None, 0) else None
     if difference is None:
         reconciliation = "NICHT_BEWERTET"
@@ -483,11 +489,11 @@ def assess_order_costs(
     theory_production = _theoretical_production(order, production, positions, invoice_controls, profiles)
     theoretical_mgk = _round(float(theory_material["eligible_base"]) * float(rates["material_rate"]) / 100.0)
     theoretical_vv = _round(float(theory_production["theoretical"]) * float(rates["vv_rate"]) / 100.0)
-    theoretical_total = _round(
+    theoretical_total = (
         float(theory_material["total"]) + float(theory_production["theoretical"])
         + ktr_cost + fixed + theoretical_mgk + theoretical_vv
     )
-    theoretical_result = _round(revenue - theoretical_total) if revenue is not None else None
+    theoretical_result = revenue - theoretical_total if revenue is not None else None
     complete = bool(theory_material["complete"])
     price_critical = bool(complete and theoretical_result is not None and theoretical_result <= 0)
     afterproduction = is_afterproduction(header.get("Zusatztext"))
@@ -510,7 +516,9 @@ def assess_order_costs(
         "lager_cost": lager_cost,
         "freight_cost": freight_cost,
         "other_ktr_cost": other_ktr,
-        "material_surcharge_base": _round(eligible_actual),
+        "individual_cost": individual_cost,
+        "net_cost": net_cost,
+        "material_surcharge_base": eligible_actual,
         "material_surcharge_rate": rates["material_rate"],
         "material_surcharge": material_surcharge,
         "vv_surcharge_rate": rates["vv_rate"],
@@ -620,6 +628,8 @@ def analyze_costs(
             "reconciliation_difference_rate": assessment["reconciliation_difference_rate"],
             "actual_material_cost_eur": assessment["actual_material_cost"],
             "production_cost_eur": assessment["production_cost"],
+            "individual_cost_eur": assessment["individual_cost"],
+            "net_cost_eur": assessment["net_cost"],
             "invoice_cost_eur": assessment["invoice_cost"],
             "ktr_cost_eur": assessment["ktr_cost"],
             "lager_cost_eur": assessment["lager_cost"],

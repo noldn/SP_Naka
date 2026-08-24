@@ -6,6 +6,17 @@ Wesentliche Änderungen werden hier in umgekehrt chronologischer Reihenfolge erf
 
 ### Korrigiert
 
+- Rohwarenkorrekturen werden als negative Kostenwirkung dargestellt und
+  saldiert, statt durch eine Betragsbildung optisch als zusätzliche Kosten zu
+  erscheinen. Berechnungen behalten die gelieferten Dezimalstellen; erst die
+  Anzeige wird einheitlich auf zwei Nachkommastellen gerundet. Die fachlich
+  bestätigten Einzelzuschläge bleiben auf zwei Nachkommastellen gerundet.
+- Die Istkostenabstimmung wurde auf Produktionskosten, Einzelkosten,
+  Netto-Gesamtkosten, zusammengefassten variablen/fixen VV-Zuschlag,
+  Materialzuschlag, Gesamtkosten, Auftragskopfkosten und Differenz verdichtet.
+- Der fixe Verwaltungs-/Vertriebszuschlag wird aus der gültigen Zeile
+  `Zuschlagsart = VVZuschlag` gelesen und gemeinsam mit dem variablen
+  VV-Zuschlag ausgewiesen.
 - Eingangsfaktura, insbesondere Werkzeugpositionen wie WKS und WS, wird in den
   theoretischen Sollkosten nicht mehr berücksichtigt. In der Istkostenabstimmung
   bleibt sie unverändert enthalten.
