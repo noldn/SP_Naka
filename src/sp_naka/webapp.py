@@ -35,6 +35,25 @@ PROFESSIONAL_ASSESSMENTS = {
 }
 REVIEW_STATUSES = {"OFFEN", "IN_PRUEFUNG", "ABGESCHLOSSEN"}
 CORRECTION_ACTIONS = {"OFFEN", "AKZEPTIERT", "WIRD_KORRIGIERT"}
+PERFORMANCE_STATUSES = {
+    "IM_REFERENZBEREICH", "AUFFAELLIG_NEGATIV", "AUFFAELLIG_POSITIV",
+    "SEHR_NEGATIV", "SEHR_POSITIV", "NICHT_BEWERTET",
+    "AKZEPTIERTE_AUSNAHME_NACHPRODUKTION",
+    "AKZEPTIERTE_AUSNAHME_KONSTRUKTION_DATEN",
+}
+KNOWN_REASON_CODES = {
+    "ERGEBNIS_NEGATIV", "AUSLASTUNGSKUNDE", "NACHPRODUKTION_ERKANNT",
+    "KONSTRUKTIONS_DATENAUFTRAG", "ROBUSTE_PEER_ABWEICHUNG",
+    "PREISNIVEAU_NIEDRIG", "LEISTUNG_ZEIT_AUFFAELLIG",
+    "MATERIALAUFWAND_AUFFAELLIG", "EINZELKOSTEN_AUFFAELLIG",
+    "MEHRAUFWAND_ERFASST", "DRUCKABSTIMMUNG_ERKANNT",
+    "HANDARBEIT_MIT_AUSSERGEWOEHNLICHEM_AUFWAND",
+    "ERSTE_STANZFORM_MIT_WS", "ERSTE_STANZFORM_OHNE_WS_HINWEIS",
+    "SERIENKANDIDAT", "ROHWARENMENGE_HINWEIS", "ROHWARENMENGE_PRUEFEN",
+    "ROHWARENMENGE_KRITISCH", "PREIS_KRITISCH",
+    "THEORETISCHE_KOSTEN_UNVOLLSTAENDIG", "KOSTENABSTIMMUNG_WARNUNG",
+    "KOSTENABSTIMMUNG_KRITISCH",
+}
 CLARIFICATION_FIELDS = [
     "dataset", "order_number", "professional_assessment", "review_status",
     "professional_clarification", "correction_required", "correction_action",
@@ -344,9 +363,19 @@ class WebApplication:
         )
         values = {"order_number": order}
         for field in fields[1:]:
-            values[field] = (
-                form[field][0].strip() if field in form else existing.get(field, "").strip()
-            )
+            if field == "expected_reason_codes" and field in form:
+                values[field] = "|".join(dict.fromkeys(
+                    value.strip() for value in form[field] if value.strip()
+                ))
+            else:
+                values[field] = (
+                    form[field][0].strip() if field in form else existing.get(field, "").strip()
+                )
+        if values["expected_performance_status"] and values["expected_performance_status"] not in PERFORMANCE_STATUSES:
+            raise AnalysisError("Ungültige erwartete Performancebewertung.")
+        selected_codes = set(filter(None, values["expected_reason_codes"].split("|")))
+        if not selected_codes.issubset(_known_reason_codes(self)):
+            raise AnalysisError("Mindestens ein ausgewählter Reason Code ist unbekannt.")
         if values["review_status"] and values["review_status"] not in REVIEW_STATUSES:
             raise AnalysisError("Ungültiger Testfallstatus.")
         if any(len(value) > 10000 for value in values.values()):
@@ -545,9 +574,7 @@ def _layout(title: str, active: str, content: str, state: dict[str, object]) -> 
         ("dashboard", "/", "Übersicht"),
         ("calculation", "/calculation", "Nachkalkulation"),
         ("runs", "/runs", "Laufhistorie"),
-        ("orders", "/orders", "Auftragsbewertung"),
-        ("review", "/review", "Prüfung & Feedback"),
-        ("corrections", "/corrections", "Korrekturen"),
+        ("orders", "/orders", "Aufträge & Prüfung"),
         ("test-cases", "/test-cases", "Testvorgaben"),
         ("parameters", "/parameters", "Parametrierung"),
         ("documentation", "/documentation", "Dokumentation"),
@@ -559,7 +586,7 @@ def _layout(title: str, active: str, content: str, state: dict[str, object]) -> 
     run_class = "running" if state.get("active") else "ready"
     return f"""<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{html.escape(title)} · SP_Naka</title><link rel="stylesheet" href="/static/style.css"></head>
+<title>{html.escape(title)} · SP_Naka</title><link rel="stylesheet" href="/static/style.css"><link rel="stylesheet" href="/static/workflow.css"></head>
 <body><header class="topbar"><div class="brand"><span class="brand-mark">SP</span><strong>NAKA</strong></div>
 <div class="top-title">Nachkalkulation & Auftragsanalyse</div><div class="run-state {run_class}">{html.escape(str(state.get("message", "Bereit")))}</div></header>
 <div class="workspace"><aside class="sidebar"><div class="menu-title">PROGRAMME</div>{nav}
@@ -971,6 +998,24 @@ def _is_correction_candidate(row: dict[str, str]) -> bool:
     }))
 
 
+def _known_reason_codes(app: WebApplication) -> set[str]:
+    codes = set(KNOWN_REASON_CODES)
+    try:
+        configured = json.loads(app.rules_path.read_text(encoding="utf-8"))
+        codes.update(str(rule.get("id", "")).strip() for rule in configured.get("rules", []))
+    except (OSError, json.JSONDecodeError):
+        pass
+    for item in app.run_history(10):
+        for file_name, field in (
+            ("performance_assessments.csv", "reason_codes"),
+            ("cost_assessments.csv", "reason_codes"),
+            ("order_assessments.csv", "reason_codes"),
+        ):
+            for row in _read_csv(item["dir"] / file_name):
+                codes.update(filter(None, row.get(field, "").split("|")))
+    return {code for code in codes if code}
+
+
 def _dashboard(app: WebApplication) -> str:
     history = app.run_history(10)
     latest = history[0] if history else None
@@ -1101,17 +1146,35 @@ def _orders_page(app: WebApplication, params: dict[str, list[str]], only_review:
     if not run_dir:
         return _card("Keine Ergebnisse", "Noch kein vollständiger Lauf vorhanden.")
     query = params.get("q", [""])[0].strip()
-    rows = _order_rows(app, run_dir, only_review, query)[:500]
+    view = "review" if only_review else params.get("view", ["all"])[0]
+    if view not in {"all", "review", "corrections"}:
+        view = "all"
+    rows = _order_rows(app, run_dir, False, query)
+    if view == "review":
+        rows = [row for row in rows if row["review_required"] == "JA"]
+    elif view == "corrections":
+        rows = [row for row in rows if _is_correction_candidate(row)]
+    rows = rows[:500]
+    clarifications = {
+        (row.get("dataset", ""), row.get("order_number", "")): row
+        for row in _read_csv(app.order_clarifications_path)
+    }
     table_rows = "".join(
         f'<tr><td><a href="/calculation?{urlencode({"dataset":row["dataset"],"order":row["order_number"]})}">{html.escape(row["order_number"])}</a></td>'
         f'<td>{html.escape(row.get("description", ""))}</td><td><span class="status {html.escape(row.get("performance_status", "").lower())}">{html.escape(row.get("performance_status", ""))}</span></td>'
         f'<td><strong>{html.escape(row["review_required"])}</strong></td><td>{html.escape(row["review_focus"] if row["review_required"] == "JA" else "Keine Bestätigung nötig")}</td>'
+        f'<td>{html.escape(clarifications.get((row["dataset"], row["order_number"]), {}).get("correction_action", "OFFEN"))}</td>'
+        f'<td>{html.escape(clarifications.get((row["dataset"], row["order_number"]), {}).get("review_status", "OFFEN"))}</td>'
         f'<td>{html.escape(row.get("reconciliation_status", ""))}</td><td>{html.escape(row.get("overall_status", ""))}</td><td>{html.escape(row.get("reason_explanation", row.get("reasons", "")))}</td></tr>'
         for row in rows
-    ) or '<tr><td colspan="8">Keine passenden Aufträge</td></tr>'
-    search = f'<form method="get" class="search"><input type="hidden" name="run" value="{html.escape(run_id)}"><input name="q" value="{html.escape(query)}" placeholder="Auftrag oder Beschreibung"><button>Suchen</button></form>'
-    intro = '<p class="hint">Prüfpflichtige Aufträge benötigen eine fachliche Begründung oder Bestätigung. Die Auftragsnummer öffnet direkt die Nachkalkulation.</p>'
-    return _card(f"Lauf {run_id}", intro + search + f'<table><thead><tr><th>Auftrag</th><th>Zusatzbeschreibung</th><th>Performance</th><th>Prüfung</th><th>Zu prüfen / bestätigen</th><th>Kostenabstimmung</th><th>Statisch</th><th>Begründung</th></tr></thead><tbody>{table_rows}</tbody></table>')
+    ) or '<tr><td colspan="10">Keine passenden Aufträge</td></tr>'
+    filters = '<div class="view-filters">' + "".join(
+        f'<a class="nav-item {"active" if view == key else ""}" href="/orders?{urlencode({"run": run_id, "view": key, "q": query})}">{label}</a>'
+        for key, label in (("all", "Alle Aufträge"), ("review", "Prüfung erforderlich"), ("corrections", "Korrekturen"))
+    ) + '</div>'
+    search = f'<form method="get" class="search"><input type="hidden" name="run" value="{html.escape(run_id)}"><input type="hidden" name="view" value="{html.escape(view)}"><input name="q" value="{html.escape(query)}" placeholder="Auftrag oder Beschreibung"><button>Suchen</button></form>'
+    intro = '<p class="hint">Einheitliche Auftragsliste: Filter auswählen und über die Auftragsnummer direkt in der Nachkalkulation prüfen, begründen oder eine Korrekturentscheidung erfassen.</p>'
+    return _card(f"Lauf {run_id}", intro + filters + search + f'<table><thead><tr><th>Auftrag</th><th>Zusatzbeschreibung</th><th>Performance</th><th>Prüfung</th><th>Zu prüfen / bestätigen</th><th>Korrektur</th><th>Status</th><th>Kostenabstimmung</th><th>Statisch</th><th>Begründung</th></tr></thead><tbody>{table_rows}</tbody></table>')
 
 
 def _order_detail(app: WebApplication, params: dict[str, list[str]]) -> str:
@@ -1200,21 +1263,26 @@ def _test_cases_page(app: WebApplication, params: dict[str, list[str]]) -> str:
         for row in rows
     ) or '<tr><td colspan="5">Noch keine Testvorgaben vorhanden.</td></tr>'
     notice = f'<div class="notice">{html.escape(message)}</div>' if message else ""
-    fields = (
-        ("expected_performance_status", "Erwartete Performancebewertung"),
-        ("expected_reason_codes", "Erwartete Reason Codes (mit | trennen)"),
-        ("accepted_exception", "Akzeptierte Ausnahme"),
-        ("correction_required", "Erwartete Korrektur"),
-        ("professional_explanation", "Fachliche Erklärung"),
+    selected_codes = set(filter(None, selected.get("expected_reason_codes", "").split("|")))
+    reason_choices = "".join(
+        f'<label class="check"><input type="checkbox" name="expected_reason_codes" value="{html.escape(code)}" {"checked" if code in selected_codes else ""}> {html.escape(code)}</label>'
+        for code in sorted(_known_reason_codes(app))
     )
-    inputs = "".join(
-        f'<label>{html.escape(label)}<textarea name="{name}" rows="2">{html.escape(selected.get(name, ""))}</textarea></label>'
-        for name, label in fields
+    status_choices = "".join(
+        f'<option value="{html.escape(status)}" {"selected" if selected.get("expected_performance_status") == status else ""}>{html.escape(status)}</option>'
+        for status in sorted(PERFORMANCE_STATUSES)
     )
+    def yes_no_select(name: str, label: str) -> str:
+        current = selected.get(name, "").strip().upper()
+        return f'<label>{html.escape(label)}<select name="{name}"><option value=""></option><option value="JA" {"selected" if current in {"JA", "YES"} else ""}>Ja</option><option value="NEIN" {"selected" if current in {"NEIN", "NO"} else ""}>Nein</option></select></label>'
     form = f'''{notice}<form method="post" action="/test-cases" class="form-grid compact">
 <input type="hidden" name="csrf" value="{app.csrf_token}">
 <label>Auftragsnummer<input name="order_number" required value="{html.escape(selected_order)}"></label>
-{inputs}
+<label>Erwartete Performancebewertung<select name="expected_performance_status"><option value=""></option>{status_choices}</select></label>
+<div><span class="field-label">Erwartete Reason Codes</span><input type="hidden" name="expected_reason_codes" value=""><details class="multi-select"><summary>{html.escape(', '.join(sorted(selected_codes)) if selected_codes else 'Reason Codes auswählen')}</summary><div class="multi-select-options">{reason_choices}</div></details></div>
+{yes_no_select("accepted_exception", "Akzeptierte Ausnahme")}
+{yes_no_select("correction_required", "Erwartete Korrektur")}
+<label>Fachliche Erklärung<textarea name="professional_explanation" rows="4">{html.escape(selected.get("professional_explanation", ""))}</textarea></label>
 <label>Status<select name="review_status"><option value=""></option>{''.join(f'<option value="{status}" {"selected" if selected.get("review_status") == status else ""}>{status}</option>' for status in sorted(REVIEW_STATUSES))}</select></label>
 <button class="primary">Testvorgabe lokal speichern</button></form>'''
     return _card("Testvorgaben", '<p class="hint">Bestätigte Fachfälle sichern erwartete Ergebnisse für künftige Testläufe.</p><table><thead><tr><th>Auftrag</th><th>Erwarteter Status</th><th>Reason Codes</th><th>Prüfstatus</th><th>Fachliche Erklärung</th></tr></thead><tbody>' + table_rows + '</tbody></table>') + _card("Testvorgabe bearbeiten", form)
@@ -1261,14 +1329,17 @@ def make_handler(app: WebApplication):
             if parsed.path == "/static/style.css":
                 self._send((app.root / "src" / "sp_naka" / "web" / "style.css").read_text(encoding="utf-8"), content_type="text/css; charset=utf-8")
                 return
+            if parsed.path == "/static/workflow.css":
+                self._send((app.root / "src" / "sp_naka" / "web" / "workflow.css").read_text(encoding="utf-8"), content_type="text/css; charset=utf-8")
+                return
             state = app.run_state()
             routes = {
                 "/": ("dashboard", "Übersicht", lambda: _dashboard(app)),
                 "/calculation": ("calculation", "Nachkalkulation", lambda: _calculation_page(app, params)),
                 "/runs": ("runs", "Laufhistorie", lambda: _runs_page(app)),
-                "/orders": ("orders", "Auftragsbewertung", lambda: _orders_page(app, params)),
-                "/review": ("review", "Prüfung & Feedback", lambda: _orders_page(app, params, True)),
-                "/corrections": ("corrections", "Korrekturen", lambda: _corrections_page(app, params)),
+                "/orders": ("orders", "Aufträge & Prüfung", lambda: _orders_page(app, params)),
+                "/review": ("orders", "Aufträge & Prüfung", lambda: _orders_page(app, params, True)),
+                "/corrections": ("orders", "Aufträge & Prüfung", lambda: _orders_page(app, {**params, "view": ["corrections"]})),
                 "/test-cases": ("test-cases", "Testvorgaben", lambda: _test_cases_page(app, params)),
                 "/order": ("orders", "Auftragsdetails", lambda: _order_detail(app, params)),
                 "/parameters": ("parameters", "Parametrierung", lambda: _parameters_page(app, params.get("message", [""])[0])),

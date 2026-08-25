@@ -22,21 +22,21 @@
 | Korrektur bestätigen | Rohwarenmenge oder Leistungswert liegt außerhalb der akzeptierten Bandbreite | Auffälligkeit akzeptieren oder „Wird korrigiert“ wählen |
 | Kostenabstimmung prüfen | rekonstruierte Kosten weichen erheblich vom Auftragskopf ab | fehlende Kosten/Buchungen klären und begründen |
 
-Die Menüseite **Prüfung & Feedback** zeigt nur prüfpflichtige Aufträge. Ein Klick auf die Auftragsnummer öffnet unmittelbar die Nachkalkulation. Dort werden Systembewertung, Prüfauftrag, fachliche Bewertung, Korrekturentscheidung und Abschlussstatus zusammengeführt.
+Die Menüseite **Aufträge & Prüfung** führt Auftragsbewertung, Prüfung/Feedback und Korrekturen zusammen. Die Filter **Alle Aufträge**, **Prüfung erforderlich** und **Korrekturen** bestimmen, welche Fälle angezeigt werden. Ein Klick auf die Auftragsnummer öffnet unmittelbar die Nachkalkulation. Dort werden Systembewertung, Prüfauftrag, fachliche Bewertung, Korrekturentscheidung und Abschlussstatus zusammengeführt.
 
 ## Ablauf je Datenzyklus
 
 1. CSV-Dateien im vorgesehenen Datenbestand ersetzen.
 2. Standard- oder Testprozess starten.
-3. **Korrekturen** zuerst bearbeiten; diese Fälle enthalten konkrete Daten- oder Leistungsauffälligkeiten.
-4. Danach **Prüfung & Feedback** bearbeiten und fachliche Ursachen bestätigen.
+3. Unter **Aufträge & Prüfung** den Filter **Korrekturen** zuerst bearbeiten; diese Fälle enthalten konkrete Daten- oder Leistungsauffälligkeiten.
+4. Danach den Filter **Prüfung erforderlich** bearbeiten und fachliche Ursachen bestätigen.
 5. Mit Status `ABGESCHLOSSEN` wird die Entscheidung für diesen Auftrag dokumentiert.
 6. Bei **Wird korrigiert** erfolgt die eigentliche Korrektur im führenden System. Der nächste Export und Lauf bewertet die neuen Daten neu.
 7. Wiederkehrende fachlich bestätigte Fälle können als Testvorgabe gepflegt werden. Eine einzelne Rückmeldung ändert die Analyse nicht automatisch.
 
 ## Test- und Lerndaten
 
-Unter **Testvorgaben** werden erwarteter Status, erwartete Reason Codes, akzeptierte Ausnahme, Korrekturhinweis und fachliche Erklärung je Testauftrag gepflegt. Diese Vorgaben dienen als Regressionstest und als nachvollziehbares Fachwissen. Neue Stichproben sollten zunächst im Testdatenbestand bleiben; bestätigte, repräsentative Fälle können später kontrolliert in den historischen Referenzbestand übernommen werden.
+Unter **Testvorgaben** werden erwarteter Status, erwartete Reason Codes, akzeptierte Ausnahme, Korrekturhinweis und fachliche Erklärung je Testauftrag gepflegt. Status und Reason Codes werden aus festen Listen gewählt; mehrere Reason Codes können im Auswahlfeld angehakt werden. Diese Vorgaben dienen als Regressionstest und als nachvollziehbares Fachwissen. Neue Stichproben sollten zunächst im Testdatenbestand bleiben; bestätigte, repräsentative Fälle können später kontrolliert in den historischen Referenzbestand übernommen werden.
 
 ## Regeln im Detail
 

@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from sp_naka.errors import AnalysisError
-from sp_naka.webapp import WebApplication, _calculation_page, _safe_run_dir
+from sp_naka.webapp import WebApplication, _calculation_page, _safe_run_dir, _test_cases_page
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -148,6 +148,24 @@ class WebApplicationTests(unittest.TestCase):
                 "dataset": ["training"], "order_number": ["100"],
                 "professional_assessment": ["OFFEN"], "review_status": ["FREIGEGEBEN"],
             })
+
+    def test_test_case_uses_validated_multiple_reason_code_selection(self) -> None:
+        self.app.save_test_case({
+            "order_number": ["100"],
+            "expected_performance_status": ["SEHR_NEGATIV"],
+            "expected_reason_codes": ["", "ERGEBNIS_NEGATIV", "ROHWARENMENGE_KRITISCH"],
+            "accepted_exception": ["NEIN"],
+            "correction_required": ["JA"],
+            "professional_explanation": ["Fachlich geprüft"],
+            "review_status": ["ABGESCHLOSSEN"],
+        })
+
+        record = self.app.test_case("100")
+        page = _test_cases_page(self.app, {"order": ["100"]})
+
+        self.assertEqual("ERGEBNIS_NEGATIV|ROHWARENMENGE_KRITISCH", record["expected_reason_codes"])
+        self.assertIn('type="checkbox" name="expected_reason_codes"', page)
+        self.assertIn('value="SEHR_NEGATIV" selected', page)
 
     def test_review_section_is_visible_for_training_data_without_test_note(self) -> None:
         self._configure_order_source()
