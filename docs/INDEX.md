@@ -2,6 +2,7 @@
 
 | Bereich | Zweck |
 |---|---|
+| `RULES_AND_REVIEW_PROCESS.md` | Kurzübersicht und detaillierter fachlicher Regel-, Prüf- und Korrekturprozess |
 | `ARCHITEKTUR.md` | Technischer Aufbau und Datenfluss |
 | `ANALYSIS_PROCESS.md` | Phasen, Bewertungsprozess, Ergebnisse und Feedback |
 | `CHANGELOG.md` | Nachvollziehbare Änderungen am Projekt |

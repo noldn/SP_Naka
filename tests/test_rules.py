@@ -7,6 +7,25 @@ from sp_naka.rules import evaluate_rule, rule_applies
 
 
 class RuleEvaluationTests(unittest.TestCase):
+    def test_wellboard_article_group_09_is_used_independent_of_article_prefix(self) -> None:
+        rule = Rule(
+            rule_id="MAT-WELLBOARD-GROUP",
+            description="Wellkarton per Artikelgruppe",
+            trigger_stages=frozenset({"KLEBEN"}),
+            requirement_type="article_group_code_any",
+            values=("09",),
+            source="RW_Buchungen.csv",
+            pass_reason="vorhanden",
+            fail_reason="fehlt",
+        )
+
+        result = evaluate_rule(
+            rule, "100", set(), {"RW_Buchungen.csv": {"BELIEBIG"}},
+            {"RW_Buchungen.csv": {"09"}},
+        )
+
+        self.assertEqual("BESTANDEN", result.status)
+
     def test_window_stage_requires_window_film(self) -> None:
         rule = Rule(
             rule_id="FENSTER-FOLIE",

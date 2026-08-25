@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-14.2",
+  "version": "2026-08-25.1",
   "rules": [
     {
       "id": "MAT-DRUCK-PLATTE",
@@ -53,12 +53,12 @@
       "description": "Bei Kleben oder Aufrichten muss eine Wellkarton-Rohwarenbuchung vorhanden sein.",
       "trigger_stages": ["KLEBEN", "KLEB", "AUFRICHTEN", "AUFRICHT"],
       "requirement": {
-        "type": "article_prefix",
+        "type": "article_group_code_any",
         "source": "RW_Buchungen.csv",
-        "values": ["94"]
+        "values": ["09"]
       },
-      "pass_reason": "Kleben/Aufrichten vorhanden und Wellkarton-Buchung mit Artikelpräfix 94 nachgewiesen.",
-      "fail_reason": "Kleben/Aufrichten vorhanden, aber keine Wellkarton-Buchung mit Artikelpräfix 94 nachgewiesen."
+      "pass_reason": "Kleben/Aufrichten vorhanden und Wellkarton-Buchung der Artikelgruppe 09 nachgewiesen.",
+      "fail_reason": "Kleben/Aufrichten vorhanden, aber keine Wellkarton-Buchung der Artikelgruppe 09 nachgewiesen."
     }
   ]
 }

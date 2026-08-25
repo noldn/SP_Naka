@@ -64,18 +64,18 @@ class PipelineIntegrationTests(unittest.TestCase):
         )
         write_csv(
             self.data / "Fertigungsmaterial.csv",
-            ["Auftrag", "Artikel", "ArtikelGruppeBez"],
+            ["Auftrag", "Artikel", "ArtikelGruppe", "ArtikelGruppeBez"],
             [
-                ["100", "PL1", "Druckplatten"],
-                ["100", "LA1", "Lacke"],
-                ["200", "94001", "Karton"],
-                ["300", "94002", "Karton"],
+                ["100", "PL1", "", "Druckplatten"],
+                ["100", "LA1", "", "Lacke"],
+                ["200", "BELIEBIG", "09", "Karton"],
+                ["300", "94002", "02", "Karton"],
             ],
         )
         write_csv(
             self.data / "RW_Buchungen.csv",
-            ["BelegNummer", "Artikel"],
-            [["200", "94001"]],
+            ["BelegNummer", "Artikel", "ArtikelGruppe"],
+            [["200", "BELIEBIG", "09"]],
         )
 
     def tearDown(self) -> None:

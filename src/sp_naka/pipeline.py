@@ -109,11 +109,26 @@ def _load_articles(source_dir: Path) -> dict[str, dict[str, set[str]]]:
     return result
 
 
+def _load_article_group_codes(source_dir: Path) -> dict[str, dict[str, set[str]]]:
+    result: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+    for file_name, order_field in (
+        ("Fertigungsmaterial.csv", "Auftrag"),
+        ("RW_Buchungen.csv", "BelegNummer"),
+    ):
+        for row in read_rows(source_dir, file_name):
+            order = row[order_field].strip()
+            group = row.get("ArtikelGruppe", "").strip().zfill(2)
+            if order and group:
+                result[order][file_name].add(group)
+    return result
+
+
 def _assess(
     orders: dict[str, tuple[str, str]],
     stages: dict[str, set[str]],
     groups: dict[str, set[str]],
     articles: dict[str, dict[str, set[str]]],
+    article_group_codes: dict[str, dict[str, set[str]]],
     rules,
 ) -> tuple[list[OrderAssessment], list[RuleResult]]:
     assessments: list[OrderAssessment] = []
@@ -127,6 +142,7 @@ def _assess(
                 order_number,
                 groups.get(order_number, set()),
                 articles.get(order_number, {}),
+                article_group_codes.get(order_number, {}),
             )
             for rule in applicable
         ]
@@ -217,14 +233,17 @@ def run_analysis(
     stages = _load_stages(source_dir)
     material_groups = _load_material_groups(source_dir)
     articles = _load_articles(source_dir)
+    article_group_codes = _load_article_group_codes(source_dir)
     unknown_orders = (
-        set(stages).union(material_groups).union(articles).difference(orders)
+        set(stages).union(material_groups).union(articles).union(article_group_codes).difference(orders)
     )
     if unknown_orders:
         raise AnalysisError(
             f"{len(unknown_orders)} Auftragsreferenzen fehlen im Auftragskopf; Lauf abgebrochen."
         )
-    assessments, rule_results = _assess(orders, stages, material_groups, articles, rules)
+    assessments, rule_results = _assess(
+        orders, stages, material_groups, articles, article_group_codes, rules
+    )
 
     performance_results: list[dict[str, object]] = []
     performance_summary: dict[str, object] | None = None

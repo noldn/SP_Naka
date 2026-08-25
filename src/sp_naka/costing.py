@@ -614,9 +614,14 @@ def analyze_costs(
             explanations.append("Auch mit Sollmaterial und Idealleistung bleibt das theoretische Ergebnis negativ oder null; der Preis ist ein kritischer Faktor.")
         if not assessment["theoretical_complete"]:
             explanations.append("Mindestens einem Sollmaterial konnte kein Preis belastbar zugeordnet werden.")
+        construction_data_order = (header.get("AuftragsArt") or "").strip().upper() in {"M", "B"}
         manual = assessment["reconciliation_status"] in {"WARNUNG", "KRITISCH"} or not bool(
             assessment["theoretical_complete"]
-        ) or bool(assessment["price_critical"] and not assessment["afterproduction_detected"])
+        ) or bool(
+            assessment["price_critical"]
+            and not assessment["afterproduction_detected"]
+            and not construction_data_order
+        )
         statuses[str(assessment["reconciliation_status"])] += 1
         output.append({
             "run_id": run_id,

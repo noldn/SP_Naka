@@ -34,6 +34,12 @@ PROFESSIONAL_ASSESSMENTS = {
     "AKZEPTIERTE_AUSNAHME",
 }
 REVIEW_STATUSES = {"OFFEN", "IN_PRUEFUNG", "ABGESCHLOSSEN"}
+CORRECTION_ACTIONS = {"OFFEN", "AKZEPTIERT", "WIRD_KORRIGIERT"}
+CLARIFICATION_FIELDS = [
+    "dataset", "order_number", "professional_assessment", "review_status",
+    "professional_clarification", "correction_required", "correction_action",
+    "reviewed_by", "reviewed_at",
+]
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
@@ -63,6 +69,16 @@ def _write_csv_replace(path: Path, fields: list[str], rows: list[dict[str, str]]
             }
             for row in rows
         )
+    temporary.replace(path)
+
+
+def _write_semicolon_csv_replace(path: Path, fields: list[str], rows: list[dict[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    with temporary.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, delimiter=";", extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
     temporary.replace(path)
 
 
@@ -140,15 +156,15 @@ class WebApplication:
                 ["customer_key", "active_from", "active_until", "reason", "approved_by", "approved_at"],
                 [],
             )
-        if not self.order_clarifications_path.is_file():
-            _write_csv_replace(
-                self.order_clarifications_path,
-                [
-                    "dataset", "order_number", "professional_assessment", "review_status",
-                    "professional_clarification", "correction_required", "reviewed_by", "reviewed_at",
-                ],
-                [],
-            )
+        clarification_rows = _read_csv(self.order_clarifications_path)
+        if not self.order_clarifications_path.is_file() or (
+            clarification_rows and "correction_action" not in clarification_rows[0]
+        ):
+            for row in clarification_rows:
+                row["correction_action"] = (
+                    "WIRD_KORRIGIERT" if row.get("correction_required") == "YES" else "OFFEN"
+                )
+            _write_csv_replace(self.order_clarifications_path, CLARIFICATION_FIELDS, clarification_rows)
 
     def config(self) -> dict[str, object]:
         try:
@@ -236,6 +252,7 @@ class WebApplication:
             "review_status": inherited_status if inherited_status in REVIEW_STATUSES else "OFFEN",
             "professional_clarification": (test_case.get("professional_explanation") or "").strip(),
             "correction_required": "NO",
+            "correction_action": "OFFEN",
             "reviewed_by": "",
             "reviewed_at": "",
         }
@@ -269,22 +286,22 @@ class WebApplication:
         return {}
 
     def save_order_clarification(self, form: dict[str, list[str]]) -> None:
-        fields = [
-            "dataset", "order_number", "professional_assessment", "review_status",
-            "professional_clarification", "correction_required", "reviewed_by", "reviewed_at",
-        ]
+        fields = CLARIFICATION_FIELDS
         dataset = form.get("dataset", [""])[0].strip()
         order = form.get("order_number", [""])[0].strip()
         assessment = form.get("professional_assessment", [""])[0].strip()
         status = form.get("review_status", [""])[0].strip()
         clarification = form.get("professional_clarification", [""])[0].strip()
         reviewed_by = form.get("reviewed_by", [""])[0].strip()
+        correction_action = form.get("correction_action", ["OFFEN"])[0].strip()
         if dataset not in CALCULATION_DATASETS:
             raise AnalysisError("Unbekannter Datenbestand.")
         if assessment not in PROFESSIONAL_ASSESSMENTS:
             raise AnalysisError("Bitte eine gültige fachliche Bewertung wählen.")
         if status not in REVIEW_STATUSES:
             raise AnalysisError("Bitte einen gültigen Prüfstatus wählen.")
+        if correction_action not in CORRECTION_ACTIONS:
+            raise AnalysisError("Bitte eine gültige Korrekturentscheidung wählen.")
         if len(clarification) > 10000 or len(reviewed_by) > 200:
             raise AnalysisError("Die fachliche Rückmeldung ist zu lang.")
         load_order_calculation(self.calculation_data_dir(dataset), order)
@@ -298,11 +315,49 @@ class WebApplication:
             "professional_assessment": assessment,
             "review_status": status,
             "professional_clarification": clarification,
-            "correction_required": "YES" if form.get("correction_required", [""])[0] == "on" else "NO",
+            "correction_required": "YES" if (
+                form.get("correction_required", [""])[0] == "on"
+                or correction_action == "WIRD_KORRIGIERT"
+            ) else "NO",
+            "correction_action": correction_action,
             "reviewed_by": reviewed_by,
             "reviewed_at": datetime.now().isoformat(timespec="seconds"),
         })
         _write_csv_replace(self.order_clarifications_path, fields, rows)
+
+    def save_test_case(self, form: dict[str, list[str]]) -> None:
+        fields = [
+            "order_number", "current_performance_status", "current_reason_codes",
+            "current_explanation", "expected_performance_status", "expected_reason_codes",
+            "accepted_exception", "correction_required", "professional_explanation",
+            "review_status",
+        ]
+        order = form.get("order_number", [""])[0].strip()
+        if not order or len(order) > 50:
+            raise AnalysisError("Bitte eine gültige Auftragsnummer eingeben.")
+        existing = next(
+            (
+                row for row in _read_semicolon_csv(self.test_cases_path)
+                if (row.get("order_number") or "").strip() == order
+            ),
+            {},
+        )
+        values = {"order_number": order}
+        for field in fields[1:]:
+            values[field] = (
+                form[field][0].strip() if field in form else existing.get(field, "").strip()
+            )
+        if values["review_status"] and values["review_status"] not in REVIEW_STATUSES:
+            raise AnalysisError("Ungültiger Testfallstatus.")
+        if any(len(value) > 10000 for value in values.values()):
+            raise AnalysisError("Testvorgabe ist zu lang.")
+        rows = [
+            row for row in _read_semicolon_csv(self.test_cases_path)
+            if (row.get("order_number") or "").strip() != order
+        ]
+        rows.append(values)
+        rows.sort(key=lambda row: (row.get("order_number") or ""))
+        _write_semicolon_csv_replace(self.test_cases_path, fields, rows)
 
     def run_history(self, limit: int = 10) -> list[dict[str, object]]:
         root = self.output_root()
@@ -492,7 +547,10 @@ def _layout(title: str, active: str, content: str, state: dict[str, object]) -> 
         ("runs", "/runs", "Laufhistorie"),
         ("orders", "/orders", "Auftragsbewertung"),
         ("review", "/review", "Prüfung & Feedback"),
+        ("corrections", "/corrections", "Korrekturen"),
+        ("test-cases", "/test-cases", "Testvorgaben"),
         ("parameters", "/parameters", "Parametrierung"),
+        ("documentation", "/documentation", "Dokumentation"),
     ]
     nav = "".join(
         f'<a class="nav-item {"active" if key == active else ""}" href="{url}">{html.escape(label)}</a>'
@@ -805,6 +863,16 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
     )
     automated_rows = (
         ("Systembewertung", automated.get("performance_status") or official_assessment),
+        (
+            "Muss geprüft werden?",
+            "JA" if automated.get("manual_review_required") == "True" else "NEIN",
+        ),
+        (
+            "Konkreter Prüfauftrag",
+            _review_focus(
+                automated.get("reason_codes", ""), automated.get("reason_review_status", "")
+            ) if automated.get("manual_review_required") == "True" else "Keine Bestätigung erforderlich",
+        ),
         ("System-Prüfstatus", automated.get("reason_review_status") or "—"),
         (
             "Reason Codes",
@@ -826,6 +894,7 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
         ("Vorhandener Testfallstatus", test_case.get("review_status") or "—"),
         ("Gespeicherte Fachbewertung", clarification.get("professional_assessment") or "OFFEN"),
         ("Prüfstatus", clarification.get("review_status") or "OFFEN"),
+        ("Korrekturentscheidung", clarification.get("correction_action") or "OFFEN"),
     )
     automated_table = "".join(
         f"<tr><th>{html.escape(label)}</th><td>{html.escape(str(value))}</td></tr>"
@@ -838,7 +907,7 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
 <label>Fachliche Bewertung<select name="professional_assessment" required>{assessment_select}</select></label>
 <label>Status<select name="review_status" required>{status_select}</select></label>
 <label class="full-width">Fachliche Klärung<textarea name="professional_clarification" rows="5" placeholder="Beobachtung, Ursache und fachliche Entscheidung dokumentieren">{html.escape(clarification.get('professional_clarification', ''))}</textarea></label>
-<label class="check"><input type="checkbox" name="correction_required" {"checked" if clarification.get("correction_required") == "YES" else ""}> Korrektur erforderlich</label>
+<label>Korrekturentscheidung<select name="correction_action"><option value="OFFEN" {"selected" if clarification.get("correction_action", "OFFEN") == "OFFEN" else ""}>Offen</option><option value="AKZEPTIERT" {"selected" if clarification.get("correction_action") == "AKZEPTIERT" else ""}>Auffälligkeit akzeptiert</option><option value="WIRD_KORRIGIERT" {"selected" if clarification.get("correction_action") == "WIRD_KORRIGIERT" else ""}>Wird im führenden System korrigiert</option></select></label>
 <label>Geprüft von<input name="reviewed_by" maxlength="200" value="{html.escape(clarification.get('reviewed_by', ''))}"></label>
 <button class="primary">Bewertung lokal speichern</button></form>"""
     note = _card(
@@ -865,6 +934,41 @@ def _latest_run(app: WebApplication, requested: str = "") -> tuple[str, Path | N
         return requested, _safe_run_dir(app.output_root(), requested)
     history = app.run_history(1)
     return (history[0]["dir"].name, history[0]["dir"]) if history else ("", None)
+
+
+def _dataset_for_source(app: WebApplication, source: Path) -> str:
+    resolved = source.resolve()
+    for selection in ("standard", "test", "training"):
+        try:
+            if app.calculation_data_dir(selection) == resolved:
+                return selection
+        except (AnalysisError, OSError):
+            pass
+    return "standard"
+
+
+def _review_focus(codes: str, review_status: str = "") -> str:
+    values = set(filter(None, codes.split("|")))
+    if values.intersection({"ROHWARENMENGE_PRUEFEN", "ROHWARENMENGE_KRITISCH"}):
+        return "Rohwarenkorrektur prüfen und entscheiden"
+    if values.intersection({"LEISTUNG_ZEIT_AUFFAELLIG", "MATERIALAUFWAND_AUFFAELLIG", "EINZELKOSTEN_AUFFAELLIG"}):
+        return "Leistung, Material bzw. Einzelkosten prüfen"
+    if any(value.startswith("KOSTENABSTIMMUNG_") for value in values):
+        return "Kostenabstimmung begründen"
+    if "PREIS_KRITISCH" in values:
+        return "Preisursache bestätigen"
+    if review_status == "PROPOSED_REASON_CONFIRMATION_REQUIRED":
+        return "Vorgeschlagene Ursache bestätigen"
+    return "Fachliche Ursache dokumentieren"
+
+
+def _is_correction_candidate(row: dict[str, str]) -> bool:
+    codes = set(filter(None, row.get("reason_codes", "").split("|")))
+    return bool(codes.intersection({
+        "ROHWARENMENGE_PRUEFEN", "ROHWARENMENGE_KRITISCH",
+        "LEISTUNG_ZEIT_AUFFAELLIG", "MATERIALAUFWAND_AUFFAELLIG",
+        "EINZELKOSTEN_AUFFAELLIG",
+    }))
 
 
 def _dashboard(app: WebApplication) -> str:
@@ -957,6 +1061,7 @@ def _order_rows(app: WebApplication, run_dir: Path, only_review: bool, query: st
     costs = {row["order_number"]: row for row in _read_csv(run_dir / "cost_assessments.csv")}
     manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     source = Path(manifest.get("configuration", {}).get("source_directory", ""))
+    dataset = _dataset_for_source(app, source) if source.is_dir() else "standard"
     descriptions = {}
     if source.is_dir() and (source / "Auftragskopf.csv").is_file():
         descriptions = {row["BelegNummer"].strip(): row.get("Zusatztext", "").strip() for row in read_rows(source, "Auftragskopf.csv")}
@@ -982,6 +1087,11 @@ def _order_rows(app: WebApplication, run_dir: Path, only_review: bool, query: st
             "reason_explanation": combined_explanation,
             "order_number": order,
             "description": descriptions.get(order, ""),
+            "dataset": dataset,
+            "review_required": "JA" if any(
+                row.get("manual_review_required") == "True" for row in (p, s, c)
+            ) else "NEIN",
+            "review_focus": _review_focus("|".join(combined_codes), p.get("reason_review_status", "")),
         })
     return result
 
@@ -993,13 +1103,15 @@ def _orders_page(app: WebApplication, params: dict[str, list[str]], only_review:
     query = params.get("q", [""])[0].strip()
     rows = _order_rows(app, run_dir, only_review, query)[:500]
     table_rows = "".join(
-        f'<tr><td><a href="/order?{urlencode({"run":run_id,"order":row["order_number"]})}">{html.escape(row["order_number"])}</a></td>'
+        f'<tr><td><a href="/calculation?{urlencode({"dataset":row["dataset"],"order":row["order_number"]})}">{html.escape(row["order_number"])}</a></td>'
         f'<td>{html.escape(row.get("description", ""))}</td><td><span class="status {html.escape(row.get("performance_status", "").lower())}">{html.escape(row.get("performance_status", ""))}</span></td>'
+        f'<td><strong>{html.escape(row["review_required"])}</strong></td><td>{html.escape(row["review_focus"] if row["review_required"] == "JA" else "Keine Bestätigung nötig")}</td>'
         f'<td>{html.escape(row.get("reconciliation_status", ""))}</td><td>{html.escape(row.get("overall_status", ""))}</td><td>{html.escape(row.get("reason_explanation", row.get("reasons", "")))}</td></tr>'
         for row in rows
-    ) or '<tr><td colspan="6">Keine passenden Aufträge</td></tr>'
+    ) or '<tr><td colspan="8">Keine passenden Aufträge</td></tr>'
     search = f'<form method="get" class="search"><input type="hidden" name="run" value="{html.escape(run_id)}"><input name="q" value="{html.escape(query)}" placeholder="Auftrag oder Beschreibung"><button>Suchen</button></form>'
-    return _card(f"Lauf {run_id}", search + f'<table><thead><tr><th>Auftrag</th><th>Zusatzbeschreibung</th><th>Performance</th><th>Kostenabstimmung</th><th>Statisch</th><th>Begründung</th></tr></thead><tbody>{table_rows}</tbody></table>')
+    intro = '<p class="hint">Prüfpflichtige Aufträge benötigen eine fachliche Begründung oder Bestätigung. Die Auftragsnummer öffnet direkt die Nachkalkulation.</p>'
+    return _card(f"Lauf {run_id}", intro + search + f'<table><thead><tr><th>Auftrag</th><th>Zusatzbeschreibung</th><th>Performance</th><th>Prüfung</th><th>Zu prüfen / bestätigen</th><th>Kostenabstimmung</th><th>Statisch</th><th>Begründung</th></tr></thead><tbody>{table_rows}</tbody></table>')
 
 
 def _order_detail(app: WebApplication, params: dict[str, list[str]]) -> str:
@@ -1041,6 +1153,84 @@ def _order_detail(app: WebApplication, params: dict[str, list[str]]) -> str:
     return '<div class="grid two">' + _card("Bewertungsdetails", f"<table class=\"details\">{details}</table>") + _card("Prüfung und Feedback", feedback) + "</div>"
 
 
+def _corrections_page(app: WebApplication, params: dict[str, list[str]]) -> str:
+    run_id, run_dir = _latest_run(app, params.get("run", [""])[0])
+    if not run_dir:
+        return _card("Keine Ergebnisse", "Noch kein vollständiger Lauf vorhanden.")
+    rows = _order_rows(app, run_dir, False)
+    saved = {
+        (row.get("dataset", ""), row.get("order_number", "")): row
+        for row in _read_csv(app.order_clarifications_path)
+    }
+    candidates = [
+        row for row in rows
+        if _is_correction_candidate(row)
+        or saved.get((row["dataset"], row["order_number"]), {}).get("correction_action") == "WIRD_KORRIGIERT"
+    ]
+    table_rows = "".join(
+        '<tr>'
+        f'<td><a href="/calculation?{urlencode({"dataset": row["dataset"], "order": row["order_number"]})}">{html.escape(row["order_number"])}</a></td>'
+        f'<td>{html.escape(_review_focus(row.get("reason_codes", "")))}</td>'
+        f'<td>{html.escape(row.get("raw_material_quantity_status", "") or "—")}</td>'
+        f'<td>{html.escape(saved.get((row["dataset"], row["order_number"]), {}).get("correction_action", "OFFEN"))}</td>'
+        f'<td>{html.escape(saved.get((row["dataset"], row["order_number"]), {}).get("review_status", "OFFEN"))}</td>'
+        f'<td>{html.escape(row.get("reason_explanation", ""))}</td></tr>'
+        for row in candidates
+    ) or '<tr><td colspan="6">Im aktuellen Lauf sind keine Korrekturkandidaten offen.</td></tr>'
+    intro = (
+        '<p>Hier stehen Rohwaren-, Leistungs-, Material- und Einzelkostenauffälligkeiten, die '
+        'akzeptiert oder im führenden System korrigiert werden müssen. Nach neuen CSV-Daten wird '
+        'jeder Auftrag im nächsten Lauf erneut beurteilt.</p>'
+    )
+    return _card(
+        f"Korrekturen · Lauf {run_id}",
+        intro + '<table><thead><tr><th>Auftrag</th><th>Prüfpunkt</th><th>Rohwarenstufe</th><th>Entscheidung</th><th>Status</th><th>Systemhinweis</th></tr></thead><tbody>' + table_rows + '</tbody></table>',
+    )
+
+
+def _test_cases_page(app: WebApplication, params: dict[str, list[str]]) -> str:
+    rows = _read_semicolon_csv(app.test_cases_path)
+    selected_order = params.get("order", [""])[0].strip()
+    selected = next((row for row in rows if row.get("order_number") == selected_order), {})
+    message = params.get("message", [""])[0]
+    table_rows = "".join(
+        f'<tr><td><a href="/test-cases?{urlencode({"order": row.get("order_number", "")})}">{html.escape(row.get("order_number", ""))}</a></td>'
+        f'<td>{html.escape(row.get("expected_performance_status", ""))}</td><td>{html.escape(row.get("expected_reason_codes", ""))}</td>'
+        f'<td>{html.escape(row.get("review_status", ""))}</td><td>{html.escape(row.get("professional_explanation", ""))}</td></tr>'
+        for row in rows
+    ) or '<tr><td colspan="5">Noch keine Testvorgaben vorhanden.</td></tr>'
+    notice = f'<div class="notice">{html.escape(message)}</div>' if message else ""
+    fields = (
+        ("expected_performance_status", "Erwartete Performancebewertung"),
+        ("expected_reason_codes", "Erwartete Reason Codes (mit | trennen)"),
+        ("accepted_exception", "Akzeptierte Ausnahme"),
+        ("correction_required", "Erwartete Korrektur"),
+        ("professional_explanation", "Fachliche Erklärung"),
+    )
+    inputs = "".join(
+        f'<label>{html.escape(label)}<textarea name="{name}" rows="2">{html.escape(selected.get(name, ""))}</textarea></label>'
+        for name, label in fields
+    )
+    form = f'''{notice}<form method="post" action="/test-cases" class="form-grid compact">
+<input type="hidden" name="csrf" value="{app.csrf_token}">
+<label>Auftragsnummer<input name="order_number" required value="{html.escape(selected_order)}"></label>
+{inputs}
+<label>Status<select name="review_status"><option value=""></option>{''.join(f'<option value="{status}" {"selected" if selected.get("review_status") == status else ""}>{status}</option>' for status in sorted(REVIEW_STATUSES))}</select></label>
+<button class="primary">Testvorgabe lokal speichern</button></form>'''
+    return _card("Testvorgaben", '<p class="hint">Bestätigte Fachfälle sichern erwartete Ergebnisse für künftige Testläufe.</p><table><thead><tr><th>Auftrag</th><th>Erwarteter Status</th><th>Reason Codes</th><th>Prüfstatus</th><th>Fachliche Erklärung</th></tr></thead><tbody>' + table_rows + '</tbody></table>') + _card("Testvorgabe bearbeiten", form)
+
+
+def _documentation_page(app: WebApplication) -> str:
+    path = app.root / "docs" / "RULES_AND_REVIEW_PROCESS.md"
+    text = path.read_text(encoding="utf-8")
+    # Bewusst einfache, sichere Darstellung: Originaltext wird vollständig escaped.
+    return _card(
+        "Regeln und fachlicher Prüfprozess",
+        '<p><a href="/documentation/raw">Markdown-Dokument öffnen</a></p>'
+        + f'<pre class="documentation">{html.escape(text)}</pre>',
+    )
+
+
 def make_handler(app: WebApplication):
     class Handler(BaseHTTPRequestHandler):
         def _send(self, body: str, status: int = 200, content_type: str = "text/html; charset=utf-8") -> None:
@@ -1078,9 +1268,15 @@ def make_handler(app: WebApplication):
                 "/runs": ("runs", "Laufhistorie", lambda: _runs_page(app)),
                 "/orders": ("orders", "Auftragsbewertung", lambda: _orders_page(app, params)),
                 "/review": ("review", "Prüfung & Feedback", lambda: _orders_page(app, params, True)),
+                "/corrections": ("corrections", "Korrekturen", lambda: _corrections_page(app, params)),
+                "/test-cases": ("test-cases", "Testvorgaben", lambda: _test_cases_page(app, params)),
                 "/order": ("orders", "Auftragsdetails", lambda: _order_detail(app, params)),
                 "/parameters": ("parameters", "Parametrierung", lambda: _parameters_page(app, params.get("message", [""])[0])),
+                "/documentation": ("documentation", "Dokumentation", lambda: _documentation_page(app)),
             }
+            if parsed.path == "/documentation/raw":
+                self._send((app.root / "docs" / "RULES_AND_REVIEW_PROCESS.md").read_text(encoding="utf-8"), content_type="text/plain; charset=utf-8")
+                return
             route = routes.get(parsed.path)
             if not route:
                 self._send("Nicht gefunden", 404, "text/plain; charset=utf-8")
@@ -1108,6 +1304,11 @@ def make_handler(app: WebApplication):
                         "dataset": form["dataset"][0],
                         "order": form["order_number"][0],
                         "message": "Bewertung gespeichert",
+                    }))
+                elif self.path == "/test-cases":
+                    app.save_test_case(form)
+                    self._redirect("/test-cases?" + urlencode({
+                        "order": form["order_number"][0], "message": "Testvorgabe gespeichert"
                     }))
                 else:
                     self._send("Nicht gefunden", 404, "text/plain; charset=utf-8")

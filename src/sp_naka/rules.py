@@ -9,7 +9,7 @@ from .errors import AnalysisError
 from .models import Rule, RuleResult
 
 
-ALLOWED_REQUIREMENTS = {"material_group_any", "article_prefix"}
+ALLOWED_REQUIREMENTS = {"material_group_any", "article_prefix", "article_group_code_any"}
 ALLOWED_SOURCES = {"Fertigungsmaterial.csv", "RW_Buchungen.csv"}
 
 
@@ -105,6 +105,7 @@ def evaluate_rule(
     order_number: str,
     material_groups: set[str],
     article_numbers_by_source: dict[str, set[str]],
+    article_group_codes_by_source: dict[str, set[str]] | None = None,
 ) -> RuleResult:
     if (
         rule.acceptance_exception_none_groups
@@ -146,6 +147,10 @@ def evaluate_rule(
         evidence_count = sum(
             1 for article in articles if any(article.startswith(prefix) for prefix in rule.values)
         )
+    elif rule.requirement_type == "article_group_code_any":
+        expected = {value.strip().zfill(2) for value in rule.values}
+        observed = (article_group_codes_by_source or {}).get(rule.source, set())
+        evidence_count = len(expected.intersection(observed))
     else:  # durch load_rules abgesichert
         raise AnalysisError(f"Unbekannter Anforderungstyp: {rule.requirement_type}")
 

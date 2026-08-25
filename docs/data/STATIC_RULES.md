@@ -70,7 +70,7 @@ Eine Abweichung ist ein Prüfhinweis, keine automatische fachliche Fehlerfreigab
 
 - Trigger: `KLEBEN`, `KLEB`, `AUFRICHTEN` oder `AUFRICHT` in Planung oder
   Produktionszeiten.
-- Erwartung: ein Artikel mit Präfix `94` in `RW_Buchungen.csv`.
+- Erwartung: eine Buchung der Artikelgruppe `09` in `RW_Buchungen.csv`.
 - Abweichung: keine entsprechende Rohwarenbuchung vorhanden.
 - Der vorherige BDE-Eintrag in `Fertigungsmaterial.csv` ist nur ein vorgelagerter
   Erfassungsschritt und wird nicht mehr als eigener Wellkarton-Nachweis bewertet.

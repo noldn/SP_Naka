@@ -40,7 +40,7 @@
     "invoice_article_company_separator": "|",
     "die_form_invoice_prefix": "EF",
     "die_form_service_prefix": "WS",
-    "wellboard_prefix": "94"
+    "wellboard_article_groups": ["09"]
   },
   "evidence_keywords": {
     "print_approval": ["druckabstim", "druckabstimm"],

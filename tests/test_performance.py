@@ -67,8 +67,8 @@ class PerformanceTests(unittest.TestCase):
         )
         write_csv(
             self.scoring / "Fertigungsmaterial.csv",
-            ["Auftrag", "Artikel", "GruppeBezeichnung", "Materialwert"],
-            [["S1", "94001", "Papier", 500]],
+            ["Auftrag", "Artikel", "ArtikelGruppe", "GruppeBezeichnung", "Materialwert"],
+            [["S1", "BELIEBIG", "09", "Papier", 500]],
         )
         self.parameters = self.root / "parameters.json"
         self.parameters.write_text(json.dumps({
@@ -91,7 +91,7 @@ class PerformanceTests(unittest.TestCase):
                 "construction_prefix": "WM",
                 "invoice_article_company_separator": "|",
                 "die_form_service_prefix": "WS",
-                "wellboard_prefix": "94",
+                "wellboard_article_groups": ["09"],
             },
         }), encoding="utf-8")
         self.customers = self.root / "customers.csv"
@@ -165,6 +165,26 @@ class PerformanceTests(unittest.TestCase):
         self.assertTrue(rows[0]["negative_result_exception"])
         self.assertFalse(rows[0]["manual_review_required"])
         self.assertIn("NACHPRODUKTION_ERKANNT", rows[0]["reason_codes"])
+
+    def test_normal_construction_data_order_is_not_sent_for_margin_review(self) -> None:
+        write_csv(
+            self.scoring / "Auftragskopf.csv",
+            ["BelegDatum", "BelegKopfKey", "Kunde Key", "BelegNummer", "X_ArtikelGruppe", "Erlöse", "Kosten", "AuftragsArt"],
+            [["01.01.2026", "KS1", "C1", "S1", "PG", 1000, 1800, "M"]],
+        )
+        write_csv(
+            self.scoring / "ProdZeiten.csv",
+            ["Auftrag", "DauerMaschine", "Dauer", "Mehraufwand Id", "ARVOKurz", "Stufe"],
+            [["S1", 10, "", "", "PRODUKTION", "DRUCK"]],
+        )
+
+        rows, _ = analyze_performance(
+            self.reference, self.scoring, self.parameters, self.customers, "test"
+        )
+
+        self.assertEqual("AKZEPTIERTE_AUSNAHME_KONSTRUKTION_DATEN", rows[0]["performance_status"])
+        self.assertFalse(rows[0]["manual_review_required"])
+        self.assertIn("KONSTRUKTIONS_DATENAUFTRAG", rows[0]["reason_codes"])
 
     def test_invalid_minimum_peer_group_size_is_rejected(self) -> None:
         content = json.loads(self.parameters.read_text(encoding="utf-8"))

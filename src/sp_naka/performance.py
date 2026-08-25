@@ -29,8 +29,9 @@ PERFORMANCE_FILES = {
     "RohwarenPos.csv",
     "RW_Buchungen.csv",
     "Rechnungskontrollen.csv",
+    "KTRBuchungenKI.csv",
 }
-PERFORMANCE_REQUIRED_FILES = PERFORMANCE_FILES - {"RohwarenPos.csv"}
+PERFORMANCE_REQUIRED_FILES = PERFORMANCE_FILES - {"RohwarenPos.csv", "KTRBuchungenKI.csv"}
 
 PERFORMANCE_FIELDS = [
     "run_id", "order_number", "performance_status", "absolute_result",
@@ -39,6 +40,7 @@ PERFORMANCE_FIELDS = [
     "accepted_negative_customer", "afterproduction_detected",
     "negative_result_exception", "manual_review_required", "reason_codes",
     "reason_explanation", "reason_review_status", "quantity_proxy", "quantity_bucket", "product_group",
+    "order_type", "construction_data_order", "individual_cost_per_unit",
     "construction", "die_form", "extra_effort_entries", "handwork_present",
     "print_approval_present", "first_observed_die_form", "ws_invoice_present",
     "wellboard_cost_source", "wellboard_net_value", "series_candidate",
@@ -188,7 +190,10 @@ def _load_features(source_dir: Path, parameters: dict[str, object]) -> dict[str,
     construction_prefix = str(articles["construction_prefix"]).upper()
     separator = str(articles["invoice_article_company_separator"])
     ws_prefix = str(articles["die_form_service_prefix"]).upper()
-    wellboard_prefix = str(articles["wellboard_prefix"]).upper()
+    wellboard_groups = {
+        str(value).strip().zfill(2)
+        for value in articles.get("wellboard_article_groups", ["09"])
+    }
     evidence_keywords = parameters.get("evidence_keywords", {})
     print_keywords = [
         str(value).casefold() for value in evidence_keywords.get("print_approval", ["druckabstim"])
@@ -215,6 +220,7 @@ def _load_features(source_dir: Path, parameters: dict[str, object]) -> dict[str,
             "order_date": _order_date(row.get("BelegDatum", "")),
             "customer": row.get("Kunde Key", "").strip(),
             "product_group": row.get("X_ArtikelGruppe", "").strip(),
+            "order_type": row.get("AuftragsArt", "").strip().upper(),
             "revenue": revenue,
             "cost": cost,
             "margin": margin,
@@ -224,7 +230,8 @@ def _load_features(source_dir: Path, parameters: dict[str, object]) -> dict[str,
             "constructions": set(), "die_forms": set(), "colors": set(),
             "quantity_proxy": None, "actual_duration": 0.0,
             "extra_effort": 0, "handwork": False, "print_approval": False,
-            "material_value": 0.0, "fm_wellboard_value": 0.0,
+            "material_value": 0.0, "invoice_value": 0.0, "ktr_value": 0.0,
+            "fm_wellboard_value": 0.0,
             "rw_wellboard_value": 0.0, "rw_wellboard_rows": 0,
             "ws_invoice": False, "completion_hour": None,
             "raw_required_by_article": defaultdict(float),
@@ -291,7 +298,8 @@ def _load_features(source_dir: Path, parameters: dict[str, object]) -> dict[str,
         article = row.get("Artikel", "").strip().upper()
         if article:
             features[order]["fm_value_by_article"][article] += value
-        if article.startswith(wellboard_prefix):
+        article_group = row.get("ArtikelGruppe", "").strip().zfill(2)
+        if article_group in wellboard_groups:
             features[order]["fm_wellboard_value"] += value
         group = (
             row.get("ArtikelGruppeBez")
@@ -317,7 +325,8 @@ def _load_features(source_dir: Path, parameters: dict[str, object]) -> dict[str,
             if group:
                 features[order]["raw_booked_group_by_article"][article] = group
                 features[order]["rw_groups_by_article"][article].add(group)
-        if article.startswith(wellboard_prefix):
+        article_group = row.get("ArtikelGruppe", "").strip().zfill(2)
+        if article_group in wellboard_groups:
             features[order]["rw_wellboard_rows"] += 1
             features[order]["rw_wellboard_value"] += _number(row.get("WertMat", "")) or 0.0
 
@@ -340,6 +349,13 @@ def _load_features(source_dir: Path, parameters: dict[str, object]) -> dict[str,
             continue
         article = _invoice_article(row.get("Artikel Key", ""), separator)
         features[order]["ws_invoice"] |= article.startswith(ws_prefix)
+        features[order]["invoice_value"] += abs(_number(row.get("WarenwertEUR", "")) or 0.0)
+
+    if (source_dir / "KTRBuchungenKI.csv").is_file():
+        for row in read_rows(source_dir, "KTRBuchungenKI.csv"):
+            order = row.get("KostenTraeger", "").strip()
+            if order in features:
+                features[order]["ktr_value"] += _number(row.get("Betrag", "")) or 0.0
 
     for item in features.values():
         item["construction"] = _single(item.pop("constructions"))
@@ -406,6 +422,10 @@ def _load_features(source_dir: Path, parameters: dict[str, object]) -> dict[str,
         item["total_material_cost"] = total_material_cost
         item["material_value"] = total_material_cost
         item["material_per_unit"] = total_material_cost / quantity if quantity else None
+        item["individual_cost_per_unit"] = (
+            (total_material_cost + item["invoice_value"] + item["ktr_value"]) / quantity
+            if quantity else None
+        )
     return features
 
 
@@ -443,7 +463,10 @@ def _build_profiles(features: dict[str, dict[str, object]], buckets: list[float]
     profiles = {}
     for key, items in grouped.items():
         profile: dict[str, object] = {"size": len(items)}
-        for metric in ("margin_rate", "unit_revenue", "duration_per_unit", "material_per_unit"):
+        for metric in (
+            "margin_rate", "unit_revenue", "duration_per_unit", "material_per_unit",
+            "individual_cost_per_unit",
+        ):
             values = [float(item[metric]) for item in items if item[metric] is not None]
             profile[metric] = _robust(values) if len(values) >= 3 else None
         profiles[key] = profile
@@ -579,6 +602,13 @@ def analyze_performance(
         negative_afterproduction = bool(
             item["afterproduction"] and item["margin"] is not None and item["margin"] < 0
         )
+        construction_data_order = item["order_type"] in {"M", "B"}
+        if construction_data_order:
+            reason_codes.append("KONSTRUKTIONS_DATENAUFTRAG")
+            explanations.append(
+                "Auftragsart M/B ist ein Konstruktions- oder Datenbearbeitungsauftrag; "
+                "nur ein außergewöhnlich hoher Zeit-, Material- oder Einzelkostenaufwand ist prüfpflichtig."
+            )
         if item["margin"] is not None and item["margin"] < 0:
             reason_codes.append("ERGEBNIS_NEGATIV")
             explanations.append("Erlöse minus Kosten ist negativ.")
@@ -600,7 +630,12 @@ def analyze_performance(
         unit_price_z = _z(item["unit_revenue"], selected_profile.get("unit_revenue") if selected_profile else None)
         duration_z = _z(item["duration_per_unit"], selected_profile.get("duration_per_unit") if selected_profile else None)
         material_z = _z(item["material_per_unit"], selected_profile.get("material_per_unit") if selected_profile else None)
-        if status in {"SEHR_NEGATIV", "AUFFAELLIG_NEGATIV"}:
+        individual_z = _z(
+            item["individual_cost_per_unit"],
+            selected_profile.get("individual_cost_per_unit") if selected_profile else None,
+        )
+        operational_check = status in {"SEHR_NEGATIV", "AUFFAELLIG_NEGATIV"} or construction_data_order
+        if operational_check:
             if unit_price_z is not None and unit_price_z <= -threshold:
                 reason_codes.append("PREISNIVEAU_NIEDRIG")
                 explanations.append("Der Erlös je Mengen-Proxy ist gegenüber der Peer-Gruppe auffällig niedrig.")
@@ -610,6 +645,9 @@ def analyze_performance(
             if material_z is not None and material_z >= threshold:
                 reason_codes.append("MATERIALAUFWAND_AUFFAELLIG")
                 explanations.append("Der erfasste Materialwert je Mengen-Proxy ist gegenüber der Peer-Gruppe auffällig hoch.")
+            if individual_z is not None and individual_z >= threshold:
+                reason_codes.append("EINZELKOSTEN_AUFFAELLIG")
+                explanations.append("Material und externe Einzelkosten je Mengen-Proxy sind gegenüber der Peer-Gruppe auffällig hoch.")
             if item["extra_effort"]:
                 reason_codes.append("MEHRAUFWAND_ERFASST")
                 explanations.append("Mindestens eine Produktionszeitmeldung enthält einen Mehraufwand.")
@@ -654,6 +692,7 @@ def analyze_performance(
         manual |= raw_status in {"PRUEFEN", "KRITISCH"}
         independent_afterproduction_codes = {
             "LEISTUNG_ZEIT_AUFFAELLIG", "MATERIALAUFWAND_AUFFAELLIG",
+            "EINZELKOSTEN_AUFFAELLIG",
             "MEHRAUFWAND_ERFASST", "DRUCKABSTIMMUNG_ERKANNT",
             "HANDARBEIT_MIT_AUSSERGEWOEHNLICHEM_AUFWAND",
             "ROHWARENMENGE_PRUEFEN", "ROHWARENMENGE_KRITISCH",
@@ -662,9 +701,14 @@ def analyze_performance(
             manual = bool(independent_afterproduction_codes.intersection(reason_codes))
             if not manual:
                 status = "AKZEPTIERTE_AUSNAHME_NACHPRODUKTION"
+        if construction_data_order:
+            manual = bool(independent_afterproduction_codes.intersection(reason_codes))
+            if not manual:
+                status = "AKZEPTIERTE_AUSNAHME_KONSTRUKTION_DATEN"
         explanatory_codes = {
             "PREISNIVEAU_NIEDRIG", "LEISTUNG_ZEIT_AUFFAELLIG",
             "MATERIALAUFWAND_AUFFAELLIG", "MEHRAUFWAND_ERFASST",
+            "EINZELKOSTEN_AUFFAELLIG",
             "DRUCKABSTIMMUNG_ERKANNT", "HANDARBEIT_MIT_AUSSERGEWOEHNLICHEM_AUFWAND",
         }
         if raw_status in {"PRUEFEN", "KRITISCH"}:
@@ -690,6 +734,8 @@ def analyze_performance(
             "reason_review_status": reason_review_status,
             "quantity_proxy": item["quantity_proxy"], "quantity_bucket": bucket,
             "product_group": item["product_group"], "construction": item["construction"],
+            "order_type": item["order_type"], "construction_data_order": construction_data_order,
+            "individual_cost_per_unit": item["individual_cost_per_unit"],
             "die_form": item["die_form"], "extra_effort_entries": item["extra_effort"],
             "handwork_present": item["handwork"], "print_approval_present": item["print_approval"],
             "first_observed_die_form": item["first_observed_die_form"], "ws_invoice_present": item["ws_invoice"],
