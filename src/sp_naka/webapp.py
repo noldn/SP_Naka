@@ -249,6 +249,17 @@ class WebApplication:
                 record["professional_explanation"] = explanation
         return record
 
+    def available_test_orders(self) -> dict[str, str]:
+        try:
+            source = self.calculation_data_dir("test")
+        except AnalysisError:
+            return {}
+        return {
+            row.get("BelegNummer", "").strip(): row.get("Zusatztext", "").strip()
+            for row in read_rows(source, "Auftragskopf.csv")
+            if row.get("BelegNummer", "").strip()
+        }
+
     def order_clarification(self, order_number: str, dataset: str) -> dict[str, str]:
         if dataset not in CALCULATION_DATASETS:
             raise AnalysisError("Unbekannter Datenbestand.")
@@ -354,6 +365,9 @@ class WebApplication:
         order = form.get("order_number", [""])[0].strip()
         if not order or len(order) > 50:
             raise AnalysisError("Bitte eine gültige Auftragsnummer eingeben.")
+        available_orders = self.available_test_orders()
+        if order not in available_orders:
+            raise AnalysisError("Der Auftrag ist im Testdatenbestand nicht vorhanden und kann nicht gespeichert werden.")
         existing = next(
             (
                 row for row in _read_semicolon_csv(self.test_cases_path)
@@ -371,6 +385,10 @@ class WebApplication:
                 values[field] = (
                     form[field][0].strip() if field in form else existing.get(field, "").strip()
                 )
+        automated = self.latest_order_assessment(order, self.calculation_data_dir("test"))
+        values["current_performance_status"] = automated.get("performance_status", "")
+        values["current_reason_codes"] = automated.get("reason_codes", "")
+        values["current_explanation"] = automated.get("reason_explanation", "")
         if values["expected_performance_status"] and values["expected_performance_status"] not in PERFORMANCE_STATUSES:
             raise AnalysisError("Ungültige erwartete Performancebewertung.")
         selected_codes = set(filter(None, values["expected_reason_codes"].split("|")))
@@ -387,6 +405,19 @@ class WebApplication:
         rows.append(values)
         rows.sort(key=lambda row: (row.get("order_number") or ""))
         _write_semicolon_csv_replace(self.test_cases_path, fields, rows)
+
+    def delete_test_case(self, form: dict[str, list[str]]) -> None:
+        order = form.get("order_number", [""])[0].strip()
+        if not order:
+            raise AnalysisError("Keine Testvorgabe zum Löschen ausgewählt.")
+        rows = _read_semicolon_csv(self.test_cases_path)
+        remaining = [
+            row for row in rows if (row.get("order_number") or "").strip() != order
+        ]
+        if len(remaining) == len(rows):
+            raise AnalysisError("Die Testvorgabe wurde nicht gefunden.")
+        fields = list(rows[0].keys()) if rows else ["order_number"]
+        _write_semicolon_csv_replace(self.test_cases_path, fields, remaining)
 
     def run_history(self, limit: int = 10) -> list[dict[str, object]]:
         root = self.output_root()
@@ -1253,16 +1284,88 @@ def _corrections_page(app: WebApplication, params: dict[str, list[str]]) -> str:
 
 def _test_cases_page(app: WebApplication, params: dict[str, list[str]]) -> str:
     rows = _read_semicolon_csv(app.test_cases_path)
+    available_orders = app.available_test_orders()
     selected_order = params.get("order", [""])[0].strip()
-    selected = next((row for row in rows if row.get("order_number") == selected_order), {})
+    stored = next((row for row in rows if row.get("order_number") == selected_order), {})
+    automated = {}
+    if selected_order in available_orders:
+        automated = app.latest_order_assessment(
+            selected_order, app.calculation_data_dir("test")
+        )
+    selected = dict(stored)
+    if selected_order in available_orders:
+        codes = automated.get("reason_codes", "")
+        suggestions = {
+            "order_number": selected_order,
+            "current_performance_status": automated.get("performance_status", ""),
+            "current_reason_codes": codes,
+            "current_explanation": automated.get("reason_explanation", ""),
+            "expected_performance_status": automated.get("performance_status", ""),
+            "expected_reason_codes": codes,
+            "accepted_exception": (
+                "JA" if automated.get("performance_status", "").startswith("AKZEPTIERTE_AUSNAHME") else "NEIN"
+            ),
+            "correction_required": "JA" if _is_correction_candidate({"reason_codes": codes}) else "NEIN",
+            "professional_explanation": automated.get("reason_explanation", ""),
+            "review_status": "OFFEN",
+        }
+        if not stored:
+            selected = suggestions
+        else:
+            selected.update({
+                "current_performance_status": suggestions["current_performance_status"],
+                "current_reason_codes": suggestions["current_reason_codes"],
+                "current_explanation": suggestions["current_explanation"],
+            })
+            if stored.get("review_status", "").strip() != "ABGESCHLOSSEN":
+                for field in (
+                    "expected_performance_status", "expected_reason_codes",
+                    "accepted_exception", "correction_required", "professional_explanation",
+                ):
+                    if not selected.get(field, "").strip():
+                        selected[field] = suggestions[field]
+                if not selected.get("review_status", "").strip():
+                    selected["review_status"] = "OFFEN"
     message = params.get("message", [""])[0]
     table_rows = "".join(
         f'<tr><td><a href="/test-cases?{urlencode({"order": row.get("order_number", "")})}">{html.escape(row.get("order_number", ""))}</a></td>'
         f'<td>{html.escape(row.get("expected_performance_status", ""))}</td><td>{html.escape(row.get("expected_reason_codes", ""))}</td>'
-        f'<td>{html.escape(row.get("review_status", ""))}</td><td>{html.escape(row.get("professional_explanation", ""))}</td></tr>'
+        f'<td>{html.escape(row.get("review_status", ""))}</td><td>{"Nicht im Testdatenbestand" if row.get("order_number", "") not in available_orders else "Vorhanden"}</td>'
+        f'<td>{html.escape(row.get("professional_explanation", ""))}</td></tr>'
         for row in rows
-    ) or '<tr><td colspan="5">Noch keine Testvorgaben vorhanden.</td></tr>'
+    ) or '<tr><td colspan="6">Noch keine Testvorgaben vorhanden.</td></tr>'
     notice = f'<div class="notice">{html.escape(message)}</div>' if message else ""
+    all_selectable_orders = sorted(set(available_orders).union(
+        (row.get("order_number") or "").strip() for row in rows
+    ))
+    order_options = "".join(
+        f'<option value="{html.escape(order)}" {"selected" if order == selected_order else ""}>{html.escape(order)} · {html.escape(available_orders.get(order, "NICHT IM TESTDATENBESTAND"))}</option>'
+        for order in all_selectable_orders if order
+    )
+    selector = f'''<form method="get" action="/test-cases" class="search">
+<select name="order" required><option value="">Auftrag auswählen</option>{order_options}</select>
+<button>Testvorgabe anzeigen</button></form>'''
+    if not selected_order:
+        return _card(
+            "Testvorgaben",
+            '<p class="hint">Auftrag aus dem Testdatenbestand auswählen. Freie Auftragsnummern sind nicht zulässig.</p>'
+            + selector
+            + '<table><thead><tr><th>Auftrag</th><th>Erwarteter Status</th><th>Reason Codes</th><th>Prüfstatus</th><th>Datenbestand</th><th>Fachliche Erklärung</th></tr></thead><tbody>' + table_rows + '</tbody></table>',
+        )
+    validity = (
+        '<div class="notice">Auftrag im Testdatenbestand vorhanden.</div>'
+        if selected_order in available_orders
+        else '<div class="warning-message">Dieser bestehende Eintrag ist nicht im Testdatenbestand vorhanden. Er kann nur gelöscht werden.</div>'
+    )
+    current_info = "".join(
+        f'<tr><th>{html.escape(label)}</th><td>{html.escape(value or "—")}</td></tr>'
+        for label, value in (
+            ("Aktuelle Systembewertung", automated.get("performance_status", "")),
+            ("Aktuelle Reason Codes", automated.get("reason_codes", "")),
+            ("Aktuelle Erklärung", automated.get("reason_explanation", "")),
+            ("Muss geprüft werden?", "JA" if automated.get("manual_review_required") == "True" else "NEIN"),
+        )
+    )
     selected_codes = set(filter(None, selected.get("expected_reason_codes", "").split("|")))
     reason_choices = "".join(
         f'<label class="check"><input type="checkbox" name="expected_reason_codes" value="{html.escape(code)}" {"checked" if code in selected_codes else ""}> {html.escape(code)}</label>'
@@ -1275,9 +1378,11 @@ def _test_cases_page(app: WebApplication, params: dict[str, list[str]]) -> str:
     def yes_no_select(name: str, label: str) -> str:
         current = selected.get(name, "").strip().upper()
         return f'<label>{html.escape(label)}<select name="{name}"><option value=""></option><option value="JA" {"selected" if current in {"JA", "YES"} else ""}>Ja</option><option value="NEIN" {"selected" if current in {"NEIN", "NO"} else ""}>Nein</option></select></label>'
-    form = f'''{notice}<form method="post" action="/test-cases" class="form-grid compact">
+    edit_form = ""
+    if selected_order in available_orders:
+        edit_form = f'''{notice}<form method="post" action="/test-cases" class="form-grid compact">
 <input type="hidden" name="csrf" value="{app.csrf_token}">
-<label>Auftragsnummer<input name="order_number" required value="{html.escape(selected_order)}"></label>
+<input type="hidden" name="order_number" value="{html.escape(selected_order)}">
 <label>Erwartete Performancebewertung<select name="expected_performance_status"><option value=""></option>{status_choices}</select></label>
 <div><span class="field-label">Erwartete Reason Codes</span><input type="hidden" name="expected_reason_codes" value=""><details class="multi-select"><summary>{html.escape(', '.join(sorted(selected_codes)) if selected_codes else 'Reason Codes auswählen')}</summary><div class="multi-select-options">{reason_choices}</div></details></div>
 {yes_no_select("accepted_exception", "Akzeptierte Ausnahme")}
@@ -1285,7 +1390,18 @@ def _test_cases_page(app: WebApplication, params: dict[str, list[str]]) -> str:
 <label>Fachliche Erklärung<textarea name="professional_explanation" rows="4">{html.escape(selected.get("professional_explanation", ""))}</textarea></label>
 <label>Status<select name="review_status"><option value=""></option>{''.join(f'<option value="{status}" {"selected" if selected.get("review_status") == status else ""}>{status}</option>' for status in sorted(REVIEW_STATUSES))}</select></label>
 <button class="primary">Testvorgabe lokal speichern</button></form>'''
-    return _card("Testvorgaben", '<p class="hint">Bestätigte Fachfälle sichern erwartete Ergebnisse für künftige Testläufe.</p><table><thead><tr><th>Auftrag</th><th>Erwarteter Status</th><th>Reason Codes</th><th>Prüfstatus</th><th>Fachliche Erklärung</th></tr></thead><tbody>' + table_rows + '</tbody></table>') + _card("Testvorgabe bearbeiten", form)
+    delete_form = ""
+    if stored:
+        delete_form = f'''<form method="post" action="/test-cases/delete" class="form-actions danger-zone">
+<input type="hidden" name="csrf" value="{app.csrf_token}"><input type="hidden" name="order_number" value="{html.escape(selected_order)}">
+<button class="danger">Testvorgabe {html.escape(selected_order)} löschen</button></form>'''
+    overview = _card(
+        "Testvorgaben",
+        '<p class="hint">Auftrag auswählen; Systemwerte werden für neue Vorgaben als Vorschlag übernommen.</p>'
+        + selector + '<table><thead><tr><th>Auftrag</th><th>Erwarteter Status</th><th>Reason Codes</th><th>Prüfstatus</th><th>Datenbestand</th><th>Fachliche Erklärung</th></tr></thead><tbody>' + table_rows + '</tbody></table>',
+    )
+    editor = validity + f'<h3>Aktuelle Systeminformationen</h3><table class="details">{current_info}</table>'
+    return overview + _card("Testvorgabe bearbeiten", editor + edit_form + delete_form)
 
 
 def _documentation_page(app: WebApplication) -> str:
@@ -1380,6 +1496,12 @@ def make_handler(app: WebApplication):
                     app.save_test_case(form)
                     self._redirect("/test-cases?" + urlencode({
                         "order": form["order_number"][0], "message": "Testvorgabe gespeichert"
+                    }))
+                elif self.path == "/test-cases/delete":
+                    order = form.get("order_number", [""])[0]
+                    app.delete_test_case(form)
+                    self._redirect("/test-cases?" + urlencode({
+                        "message": f"Testvorgabe {order} gelöscht"
                     }))
                 else:
                     self._send("Nicht gefunden", 404, "text/plain; charset=utf-8")

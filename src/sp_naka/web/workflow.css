@@ -50,6 +50,26 @@
   background: #fff;
 }
 
+.warning-message {
+  margin-bottom: 12px;
+  padding: 10px;
+  border-left: 4px solid #a93434;
+  background: #fff0f0;
+  color: #7b2525;
+}
+
+.danger-zone {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid #e0b9b9;
+}
+
+button.danger {
+  border-color: #a93434;
+  background: #fff0f0;
+  color: #8b2828;
+}
+
 @media (max-width: 900px) {
   .multi-select-options {
     grid-template-columns: 1fr;

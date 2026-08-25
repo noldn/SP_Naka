@@ -36,7 +36,7 @@ Die Menüseite **Aufträge & Prüfung** führt Auftragsbewertung, Prüfung/Feedb
 
 ## Test- und Lerndaten
 
-Unter **Testvorgaben** werden erwarteter Status, erwartete Reason Codes, akzeptierte Ausnahme, Korrekturhinweis und fachliche Erklärung je Testauftrag gepflegt. Status und Reason Codes werden aus festen Listen gewählt; mehrere Reason Codes können im Auswahlfeld angehakt werden. Diese Vorgaben dienen als Regressionstest und als nachvollziehbares Fachwissen. Neue Stichproben sollten zunächst im Testdatenbestand bleiben; bestätigte, repräsentative Fälle können später kontrolliert in den historischen Referenzbestand übernommen werden.
+Unter **Testvorgaben** wird der Auftrag aus dem vorhandenen Testdatenbestand ausgewählt; eine freie Eingabe der Auftragsnummer ist nicht möglich. Aktuelle Systembewertung, Reason Codes und Erklärung werden angezeigt und bei einem neuen Testfall als Vorschlag für die erwarteten Werte übernommen. Status und Reason Codes werden aus festen Listen gewählt; mehrere Reason Codes können im Auswahlfeld angehakt werden. Bestehende Vorgaben können gelöscht werden. Frühere Fehleinträge, deren Auftrag nicht im Testdatenbestand vorkommt, sind entsprechend markiert und können nur noch gelöscht werden. Diese Vorgaben dienen als Regressionstest und als nachvollziehbares Fachwissen. Neue Stichproben sollten zunächst im Testdatenbestand bleiben; bestätigte, repräsentative Fälle können später kontrolliert in den historischen Referenzbestand übernommen werden.
 
 ## Regeln im Detail
 

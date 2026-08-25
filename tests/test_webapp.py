@@ -117,6 +117,7 @@ class WebApplicationTests(unittest.TestCase):
         )
         config = self.app.config()
         config["reference_data_dir"] = str(source)
+        config["training_data_dir"] = str(source)
         self.app._save_config(config)
         return source
 
@@ -150,6 +151,7 @@ class WebApplicationTests(unittest.TestCase):
             })
 
     def test_test_case_uses_validated_multiple_reason_code_selection(self) -> None:
+        self._configure_order_source()
         self.app.save_test_case({
             "order_number": ["100"],
             "expected_performance_status": ["SEHR_NEGATIV"],
@@ -166,6 +168,23 @@ class WebApplicationTests(unittest.TestCase):
         self.assertEqual("ERGEBNIS_NEGATIV|ROHWARENMENGE_KRITISCH", record["expected_reason_codes"])
         self.assertIn('type="checkbox" name="expected_reason_codes"', page)
         self.assertIn('value="SEHR_NEGATIV" selected', page)
+
+    def test_nonexistent_test_order_cannot_be_saved_and_existing_entry_can_be_deleted(self) -> None:
+        self._configure_order_source()
+        with self.assertRaisesRegex(AnalysisError, "nicht vorhanden"):
+            self.app.save_test_case({"order_number": ["999999"]})
+        self.app.test_cases_path.parent.mkdir(parents=True, exist_ok=True)
+        self.app.test_cases_path.write_text(
+            "order_number;expected_performance_status\n999999;NICHT_BEWERTET\n",
+            encoding="utf-8-sig",
+        )
+
+        page = _test_cases_page(self.app, {"order": ["999999"]})
+        self.app.delete_test_case({"order_number": ["999999"]})
+
+        self.assertIn("nicht im Testdatenbestand vorhanden", page)
+        self.assertIn("Testvorgabe 999999 löschen", page)
+        self.assertEqual({}, self.app.test_case("999999"))
 
     def test_review_section_is_visible_for_training_data_without_test_note(self) -> None:
         self._configure_order_source()
