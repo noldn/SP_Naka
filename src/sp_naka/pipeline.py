@@ -283,8 +283,6 @@ def run_analysis(
         used_source_names.update(available_performance_files(source_dir))
     if cost_summary is not None:
         used_source_names.update(COST_REQUIRED_FILES)
-        if (source_dir / "Faktura.csv").is_file():
-            used_source_names.add("Faktura.csv")
     source_files = {
         file_name: {
             "rows": row_counts.get(file_name) or sum(1 for _ in read_rows(source_dir, file_name)),

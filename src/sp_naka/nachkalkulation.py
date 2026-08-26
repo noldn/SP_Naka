@@ -183,7 +183,6 @@ def load_order_calculation(
         cost_bookings,
         reference_dir,
         ideal_profiles(reference_dir or source, excluded_reference_orders),
-        billing,
     )
     limitations = []
     if production and not production_detail_available:

@@ -52,9 +52,7 @@ KNOWN_REASON_CODES = {
     "SERIENKANDIDAT", "ROHWARENMENGE_HINWEIS", "ROHWARENMENGE_PRUEFEN",
     "ROHWARENMENGE_KRITISCH", "PREIS_KRITISCH",
     "THEORETISCHE_KOSTEN_UNVOLLSTAENDIG", "KOSTENABSTIMMUNG_WARNUNG",
-    "KOSTENABSTIMMUNG_KRITISCH", "LIEFERMENGE_AUSSERHALB_TOLERANZ",
-    "GUTSCHRIFT_ERKANNT", "FAKTURAWERT_AUSSERHALB_TOLERANZ",
-    "SONDERKOSTEN_FAKTURA_PRUEFEN",
+    "KOSTENABSTIMMUNG_KRITISCH",
 }
 CLARIFICATION_FIELDS = [
     "dataset", "order_number", "professional_assessment", "review_status",
@@ -743,34 +741,6 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
             ("Netto", "GesamtNetto"), ("Muster", "Muster"),
         ),
     )
-    fulfillment_rows = [
-        {"label": "Auftrag abgeschlossen (offen=0)", "value": "JA" if cost_assessment["order_closed"] else "NEIN"},
-        {"label": "Liefermengenprüfung", "value": str(cost_assessment["delivery_status"])},
-        {"label": "Theoretischer Positionswert", "value": _optional_number(cost_assessment["theoretical_position_value"], "money")},
-        {"label": "Fakturierte Rechnungssumme", "value": _optional_number(cost_assessment["invoiced_value"], "money")},
-        {"label": "Gutschriften", "value": _optional_number(cost_assessment["credited_value"], "money")},
-        {"label": "Fakturierter Nettoerlös", "value": _optional_number(cost_assessment["billed_revenue"], "money")},
-        {"label": "Abweichung Nettoerlös zu theoretisch", "value": f'{_optional_number(cost_assessment["billing_difference"], "money")} / {_optional_number(cost_assessment["billing_difference_rate"], "ratio")}'},
-        {"label": "Fakturaprüfung", "value": str(cost_assessment["billing_status"])},
-        {"label": "Enthaltene Sonderkosten", "value": _optional_number(cost_assessment["special_cost_value"], "money")},
-    ]
-    delivery_rows = [
-        {
-            "position": row["position"], "article": row["article"],
-            "ordered": _optional_number(row["ordered"]),
-            "delivered": _optional_number(row["delivered"]),
-            "ratio": _optional_number(row["ratio"], "ratio"),
-        }
-        for row in cost_assessment["delivery_deviations"]
-    ]
-    fulfillment = _data_table(
-        fulfillment_rows, (("Prüfpunkt", "label"), ("Wert/Status", "value"))
-    ) + '<p class="hint">Liefermengen: Unter 90 % nur mit Gutschrift; Mehrlieferungen über 110 % sind zulässig. Vorfertigungsteile, Wertpositionen und Positionen ohne Preis sind ausgenommen. Die Fakturaquelle liegt nur aggregiert je Auftrag vor.</p>'
-    if delivery_rows:
-        fulfillment += '<details open><summary>Abweichende Lieferpositionen</summary>' + _data_table(
-            delivery_rows,
-            (("Pos.", "position"), ("Artikel", "article"), ("Bestellt", "ordered"), ("Geliefert", "delivered"), ("Quote", "ratio")),
-        ) + '</details>'
     production_summary = calculation["production_summary"]
     for row in production_summary:
         row["duration_display"] = _optional_number(row.get("duration"))
@@ -1010,7 +980,6 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
         + _card("Nachkalkulation", identity + summary, "calculation-sheet")
         + note
         + _card("Auftragspositionen", positions)
-        + _card("Liefer- und Fakturaprüfung", fulfillment)
         + _card("Produktionsleistungen/-zeiten", production + f'<details><summary>Einzelmeldungen anzeigen ({len(calculation["production"])})</summary>{production_details}</details>')
         + _card("Einzelkosten aus gelieferten Quellen", individual)
         + _card("Istkostenabstimmung", cost_sources)
@@ -1042,10 +1011,6 @@ def _review_focus(codes: str, review_status: str = "") -> str:
         return "Rohwarenkorrektur prüfen und entscheiden"
     if values.intersection({"LEISTUNG_ZEIT_AUFFAELLIG", "MATERIALAUFWAND_AUFFAELLIG", "EINZELKOSTEN_AUFFAELLIG"}):
         return "Leistung, Material bzw. Einzelkosten prüfen"
-    if "LIEFERMENGE_AUSSERHALB_TOLERANZ" in values:
-        return "Bestellte und gelieferte Menge prüfen"
-    if values.intersection({"FAKTURAWERT_AUSSERHALB_TOLERANZ", "SONDERKOSTEN_FAKTURA_PRUEFEN"}):
-        return "Faktura und Sonderkosten prüfen"
     if any(value.startswith("KOSTENABSTIMMUNG_") for value in values):
         return "Kostenabstimmung begründen"
     if "PREIS_KRITISCH" in values:
