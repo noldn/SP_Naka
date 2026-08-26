@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from sp_naka.costing import assess_order_costs, is_afterproduction
+from sp_naka.costing import assess_order_costs, is_afterproduction, _fulfillment_assessment
 
 
 def write_csv(path: Path, headers: list[str], rows: list[list[object]]) -> None:
@@ -71,6 +71,60 @@ class CostingTests(unittest.TestCase):
     def test_reconciliation_thresholds_require_absolute_and_relative_limit(self) -> None:
         self.assertEqual("WARNUNG", self._assessment("400")["reconciliation_status"])
         self.assertEqual("KRITISCH", self._assessment("30")["reconciliation_status"])
+
+    def test_closed_order_checks_delivery_billing_credit_and_exclusions(self) -> None:
+        positions = [
+            {"PositionsNr": "1", "Artikel": "A", "Menge": "100", "gelieferte_Menge": "85", "EinzelpreismZuAbschl": "10", "Preiseinheitsfaktor": "1", "ArtikelGruppe": "01", "WertPosition": "0"},
+            {"PositionsNr": "2", "Artikel": "V", "Menge": "10", "gelieferte_Menge": "0", "EinzelpreismZuAbschl": "5", "Preiseinheitsfaktor": "1", "ArtikelGruppe": "13", "ArtikelGruppeBez": "Vorfertigungsteile", "WertPosition": "0"},
+            {"PositionsNr": "3", "Artikel": "ZK", "Menge": "1", "gelieferte_Menge": "0", "EinzelpreismZuAbschl": "100", "Preiseinheitsfaktor": "1", "ArtikelGruppe": "30", "ArtikelGruppeBez": "Sonderkosten", "WertPosition": "1"},
+            {"PositionsNr": "4", "Artikel": "OHNE", "Menge": "100", "gelieferte_Menge": "0", "EinzelpreismZuAbschl": "0", "Preiseinheitsfaktor": "1", "ArtikelGruppe": "01", "WertPosition": "0"},
+        ]
+        without_credit = _fulfillment_assessment(
+            {"offen": "0"}, positions,
+            [{"Summe_Rechnung_EUR": "800", "Summe_Gutschrift_EUR": "0", "Erloes_EUR": "800", "Anzahl_Gutschriften": "0"}],
+        )
+        with_credit = _fulfillment_assessment(
+            {"offen": "0"}, positions,
+            [{"Summe_Rechnung_EUR": "1150", "Summe_Gutschrift_EUR": "150", "Erloes_EUR": "1000", "Anzahl_Gutschriften": "1"}],
+        )
+
+        self.assertEqual("PRUEFEN", without_credit["delivery_status"])
+        self.assertEqual("PRUEFEN", without_credit["billing_status"])
+        self.assertEqual(1150.0, without_credit["theoretical_position_value"])
+        self.assertEqual(100.0, without_credit["special_cost_value"])
+        self.assertEqual(1, without_credit["delivery_deviation_count"])
+        self.assertEqual("OK", with_credit["delivery_status"])
+        self.assertEqual("OK_MIT_GUTSCHRIFT", with_credit["billing_status"])
+
+    def test_delivery_and_billing_tolerance_boundaries_are_inclusive(self) -> None:
+        position = {
+            "PositionsNr": "1", "Artikel": "A", "Menge": "100",
+            "gelieferte_Menge": "90", "Einzelpreis": "10",
+            "Preiseinheitsfaktor": "1", "WertPosition": "0",
+        }
+
+        result = _fulfillment_assessment(
+            {"offen": "0"}, [position],
+            [{"Summe_Rechnung_EUR": "1100", "Erloes_EUR": "1100"}],
+        )
+
+        self.assertEqual("OK", result["delivery_status"])
+        self.assertEqual("OK", result["billing_status"])
+
+    def test_open_or_incomplete_faktura_is_marked_without_false_delivery_error(self) -> None:
+        position = {
+            "PositionsNr": "1", "Artikel": "A", "Menge": "100",
+            "gelieferte_Menge": "0", "Einzelpreis": "10",
+            "Preiseinheitsfaktor": "1", "WertPosition": "0",
+        }
+
+        open_order = _fulfillment_assessment({"offen": "1"}, [position], [])
+        closed_order = _fulfillment_assessment({"offen": "0"}, [position], [])
+
+        self.assertEqual("OFFENER_AUFTRAG", open_order["delivery_status"])
+        self.assertEqual("OFFENER_AUFTRAG", open_order["billing_status"])
+        self.assertEqual("PRUEFEN", closed_order["delivery_status"])
+        self.assertEqual("PRUEFEN", closed_order["billing_status"])
 
     def test_afterproduction_spelling_variants_use_prefix(self) -> None:
         self.assertTrue(is_afterproduction("Nachproduktion"))

@@ -52,7 +52,9 @@ KNOWN_REASON_CODES = {
     "SERIENKANDIDAT", "ROHWARENMENGE_HINWEIS", "ROHWARENMENGE_PRUEFEN",
     "ROHWARENMENGE_KRITISCH", "PREIS_KRITISCH",
     "THEORETISCHE_KOSTEN_UNVOLLSTAENDIG", "KOSTENABSTIMMUNG_WARNUNG",
-    "KOSTENABSTIMMUNG_KRITISCH",
+    "KOSTENABSTIMMUNG_KRITISCH", "LIEFERMENGE_AUSSERHALB_TOLERANZ",
+    "GUTSCHRIFT_ERKANNT", "FAKTURAWERT_AUSSERHALB_TOLERANZ",
+    "SONDERKOSTEN_FAKTURA_PRUEFEN",
 }
 CLARIFICATION_FIELDS = [
     "dataset", "order_number", "professional_assessment", "review_status",
@@ -726,9 +728,9 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
 <div><span>Produktgruppe</span><strong>{html.escape(str(header.get('X_ArtikelGruppe', '') or ''))} · {html.escape(str(header.get('ArtikelGruppeBez', '') or ''))}</strong></div></div>"""
     summary = f"""<div class="calculation-summary">
 <div><span>Erlöse</span><strong>{html.escape(_optional_number(revenue, 'money'))}</strong></div>
-<div><span>Gesamtkosten</span><strong>{html.escape(_optional_number(cost, 'money'))}</strong></div>
+<div><span>Kosten Ist (Auftragskopf)</span><strong>{html.escape(_optional_number(cost, 'money'))}</strong></div>
 <div class="{result_class}"><span>Ergebnis</span><strong>{html.escape(_optional_number(result, 'money'))}</strong><small>{html.escape(_optional_number(margin_rate, 'ratio'))}</small></div>
-<div><span>Abgestimmte Istkosten*</span><strong>{html.escape(_optional_number(cost_assessment['reconstructed_cost'], 'money'))}</strong><small>{html.escape(str(cost_assessment['reconciliation_status']))}</small></div>
+<div><span>Kosten errechnet*</span><strong>{html.escape(_optional_number(cost_assessment['reconstructed_cost'], 'money'))}</strong><small>{html.escape(str(cost_assessment['reconciliation_status']))}</small></div>
 <div><span>Theoretische Sollkosten</span><strong>{html.escape(_optional_number(cost_assessment['theoretical_total_cost'], 'money'))}</strong><small>{'PREIS KRITISCH' if cost_assessment['price_critical'] else 'theoretisch positiv möglich'}</small></div></div>
 <p class="hint">* Rekonstruktion aus Istmaterial, Produktionszeiten, Rechnungskontrollen, KORE-/Lagerkosten und den zum Belegdatum gültigen Zuschlägen.</p>"""
 
@@ -741,6 +743,34 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
             ("Netto", "GesamtNetto"), ("Muster", "Muster"),
         ),
     )
+    fulfillment_rows = [
+        {"label": "Auftrag abgeschlossen (offen=0)", "value": "JA" if cost_assessment["order_closed"] else "NEIN"},
+        {"label": "Liefermengenprüfung", "value": str(cost_assessment["delivery_status"])},
+        {"label": "Theoretischer Positionswert", "value": _optional_number(cost_assessment["theoretical_position_value"], "money")},
+        {"label": "Fakturierte Rechnungssumme", "value": _optional_number(cost_assessment["invoiced_value"], "money")},
+        {"label": "Gutschriften", "value": _optional_number(cost_assessment["credited_value"], "money")},
+        {"label": "Fakturierter Nettoerlös", "value": _optional_number(cost_assessment["billed_revenue"], "money")},
+        {"label": "Abweichung Nettoerlös zu theoretisch", "value": f'{_optional_number(cost_assessment["billing_difference"], "money")} / {_optional_number(cost_assessment["billing_difference_rate"], "ratio")}'},
+        {"label": "Fakturaprüfung", "value": str(cost_assessment["billing_status"])},
+        {"label": "Enthaltene Sonderkosten", "value": _optional_number(cost_assessment["special_cost_value"], "money")},
+    ]
+    delivery_rows = [
+        {
+            "position": row["position"], "article": row["article"],
+            "ordered": _optional_number(row["ordered"]),
+            "delivered": _optional_number(row["delivered"]),
+            "ratio": _optional_number(row["ratio"], "ratio"),
+        }
+        for row in cost_assessment["delivery_deviations"]
+    ]
+    fulfillment = _data_table(
+        fulfillment_rows, (("Prüfpunkt", "label"), ("Wert/Status", "value"))
+    ) + '<p class="hint">Liefermengen: ±10 %. Gutschriften erlauben eine geringere Menge. Vorfertigungsteile, Wertpositionen und Positionen ohne Preis sind ausgenommen. Die Fakturaquelle liegt nur aggregiert je Auftrag vor.</p>'
+    if delivery_rows:
+        fulfillment += '<details open><summary>Abweichende Lieferpositionen</summary>' + _data_table(
+            delivery_rows,
+            (("Pos.", "position"), ("Artikel", "article"), ("Bestellt", "ordered"), ("Geliefert", "delivered"), ("Quote", "ratio")),
+        ) + '</details>'
     production_summary = calculation["production_summary"]
     for row in production_summary:
         row["duration_display"] = _optional_number(row.get("duration"))
@@ -837,7 +867,7 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
         ("Gesamtkosten (netto)", cost_assessment["net_cost"], True),
         ("VV-Zuschlag (variabel + fix)", vv_total, False),
         ("Materialzuschlag", cost_assessment["material_surcharge"], False),
-        ("Gesamtkosten", cost_assessment["reconstructed_cost"], True),
+        ("Kosten errechnet", cost_assessment["reconstructed_cost"], True),
     )
     cost_body = "".join(
         f"<tr><{'th' if bold else 'td'}>{html.escape(label)}</{'th' if bold else 'td'}>"
@@ -846,7 +876,7 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
     )
     cost_body += '<tr aria-hidden="true"><td colspan="2">&nbsp;</td></tr>'
     cost_body += (
-        f"<tr><td>Kosten Auftragskopf</td><td>{html.escape(_optional_number(cost_assessment['official_cost'], 'money'))}</td></tr>"
+        f"<tr><td>Kosten Ist (Auftragskopf)</td><td>{html.escape(_optional_number(cost_assessment['official_cost'], 'money'))}</td></tr>"
         f"<tr><td>Differenz ({html.escape(str(cost_assessment['reconciliation_status']))})</td>"
         f"<td>{html.escape(_optional_number(cost_assessment['reconciliation_difference'], 'money'))} / "
         f"{html.escape(_optional_number(cost_assessment['reconciliation_difference_rate'], 'ratio'))}</td></tr>"
@@ -980,6 +1010,7 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
         + _card("Nachkalkulation", identity + summary, "calculation-sheet")
         + note
         + _card("Auftragspositionen", positions)
+        + _card("Liefer- und Fakturaprüfung", fulfillment)
         + _card("Produktionsleistungen/-zeiten", production + f'<details><summary>Einzelmeldungen anzeigen ({len(calculation["production"])})</summary>{production_details}</details>')
         + _card("Einzelkosten aus gelieferten Quellen", individual)
         + _card("Istkostenabstimmung", cost_sources)
@@ -1011,6 +1042,10 @@ def _review_focus(codes: str, review_status: str = "") -> str:
         return "Rohwarenkorrektur prüfen und entscheiden"
     if values.intersection({"LEISTUNG_ZEIT_AUFFAELLIG", "MATERIALAUFWAND_AUFFAELLIG", "EINZELKOSTEN_AUFFAELLIG"}):
         return "Leistung, Material bzw. Einzelkosten prüfen"
+    if "LIEFERMENGE_AUSSERHALB_TOLERANZ" in values:
+        return "Bestellte und gelieferte Menge prüfen"
+    if values.intersection({"FAKTURAWERT_AUSSERHALB_TOLERANZ", "SONDERKOSTEN_FAKTURA_PRUEFEN"}):
+        return "Faktura und Sonderkosten prüfen"
     if any(value.startswith("KOSTENABSTIMMUNG_") for value in values):
         return "Kostenabstimmung begründen"
     if "PREIS_KRITISCH" in values:
@@ -1026,6 +1061,7 @@ def _is_correction_candidate(row: dict[str, str]) -> bool:
         "ROHWARENMENGE_PRUEFEN", "ROHWARENMENGE_KRITISCH",
         "LEISTUNG_ZEIT_AUFFAELLIG", "MATERIALAUFWAND_AUFFAELLIG",
         "EINZELKOSTEN_AUFFAELLIG",
+        "KOSTENABSTIMMUNG_KRITISCH",
     }))
 
 
@@ -1139,8 +1175,11 @@ def _order_rows(app: WebApplication, run_dir: Path, only_review: bool, query: st
     source = Path(manifest.get("configuration", {}).get("source_directory", ""))
     dataset = _dataset_for_source(app, source) if source.is_dir() else "standard"
     descriptions = {}
+    customers = {}
     if source.is_dir() and (source / "Auftragskopf.csv").is_file():
-        descriptions = {row["BelegNummer"].strip(): row.get("Zusatztext", "").strip() for row in read_rows(source, "Auftragskopf.csv")}
+        header_rows = list(read_rows(source, "Auftragskopf.csv"))
+        descriptions = {row["BelegNummer"].strip(): row.get("Zusatztext", "").strip() for row in header_rows}
+        customers = {row["BelegNummer"].strip(): row.get("KundeName", "").strip() for row in header_rows}
     orders = sorted(set(performance).union(static).union(costs))
     result = []
     for order in orders:
@@ -1154,7 +1193,7 @@ def _order_rows(app: WebApplication, run_dir: Path, only_review: bool, query: st
         combined_explanation = " | ".join(
             value for value in (p.get("reason_explanation", ""), c.get("reason_explanation", ""), s.get("reasons", "")) if value
         )
-        haystack = " ".join((order, descriptions.get(order, ""), combined_explanation, " ".join(combined_codes))).casefold()
+        haystack = " ".join((order, customers.get(order, ""), descriptions.get(order, ""), combined_explanation, " ".join(combined_codes))).casefold()
         if query and query.casefold() not in haystack:
             continue
         result.append({
@@ -1163,6 +1202,7 @@ def _order_rows(app: WebApplication, run_dir: Path, only_review: bool, query: st
             "reason_explanation": combined_explanation,
             "order_number": order,
             "description": descriptions.get(order, ""),
+            "customer_name": customers.get(order, ""),
             "dataset": dataset,
             "review_required": "JA" if any(
                 row.get("manual_review_required") == "True" for row in (p, s, c)
@@ -1192,20 +1232,20 @@ def _orders_page(app: WebApplication, params: dict[str, list[str]], only_review:
     }
     table_rows = "".join(
         f'<tr><td><a href="/calculation?{urlencode({"dataset":row["dataset"],"order":row["order_number"]})}">{html.escape(row["order_number"])}</a></td>'
-        f'<td>{html.escape(row.get("description", ""))}</td><td><span class="status {html.escape(row.get("performance_status", "").lower())}">{html.escape(row.get("performance_status", ""))}</span></td>'
+        f'<td>{html.escape(row.get("customer_name", ""))}</td><td>{html.escape(row.get("description", ""))}</td><td><span class="status {html.escape(row.get("performance_status", "").lower())}">{html.escape(row.get("performance_status", ""))}</span></td>'
         f'<td><strong>{html.escape(row["review_required"])}</strong></td><td>{html.escape(row["review_focus"] if row["review_required"] == "JA" else "Keine Bestätigung nötig")}</td>'
         f'<td>{html.escape(clarifications.get((row["dataset"], row["order_number"]), {}).get("correction_action", "OFFEN"))}</td>'
         f'<td>{html.escape(clarifications.get((row["dataset"], row["order_number"]), {}).get("review_status", "OFFEN"))}</td>'
         f'<td>{html.escape(row.get("reconciliation_status", ""))}</td><td>{html.escape(row.get("overall_status", ""))}</td><td>{html.escape(row.get("reason_explanation", row.get("reasons", "")))}</td></tr>'
         for row in rows
-    ) or '<tr><td colspan="10">Keine passenden Aufträge</td></tr>'
+    ) or '<tr><td colspan="11">Keine passenden Aufträge</td></tr>'
     filters = '<div class="view-filters">' + "".join(
         f'<a class="nav-item {"active" if view == key else ""}" href="/orders?{urlencode({"run": run_id, "view": key, "q": query})}">{label}</a>'
         for key, label in (("all", "Alle Aufträge"), ("review", "Prüfung erforderlich"), ("corrections", "Korrekturen"))
     ) + '</div>'
-    search = f'<form method="get" class="search"><input type="hidden" name="run" value="{html.escape(run_id)}"><input type="hidden" name="view" value="{html.escape(view)}"><input name="q" value="{html.escape(query)}" placeholder="Auftrag oder Beschreibung"><button>Suchen</button></form>'
+    search = f'<form method="get" class="search"><input type="hidden" name="run" value="{html.escape(run_id)}"><input type="hidden" name="view" value="{html.escape(view)}"><input name="q" value="{html.escape(query)}" placeholder="Auftrag, Kunde oder Beschreibung"><button>Suchen</button></form>'
     intro = '<p class="hint">Einheitliche Auftragsliste: Filter auswählen und über die Auftragsnummer direkt in der Nachkalkulation prüfen, begründen oder eine Korrekturentscheidung erfassen.</p>'
-    return _card(f"Lauf {run_id}", intro + filters + search + f'<table><thead><tr><th>Auftrag</th><th>Zusatzbeschreibung</th><th>Performance</th><th>Prüfung</th><th>Zu prüfen / bestätigen</th><th>Korrektur</th><th>Status</th><th>Kostenabstimmung</th><th>Statisch</th><th>Begründung</th></tr></thead><tbody>{table_rows}</tbody></table>')
+    return _card(f"Lauf {run_id}", intro + filters + search + f'<table><thead><tr><th>Auftrag</th><th>Kunde</th><th>Zusatzbeschreibung</th><th>Performance</th><th>Prüfung</th><th>Zu prüfen / bestätigen</th><th>Korrektur</th><th>Status</th><th>Kostenabstimmung</th><th>Statisch</th><th>Begründung</th></tr></thead><tbody>{table_rows}</tbody></table>')
 
 
 def _order_detail(app: WebApplication, params: dict[str, list[str]]) -> str:
@@ -1264,21 +1304,22 @@ def _corrections_page(app: WebApplication, params: dict[str, list[str]]) -> str:
     table_rows = "".join(
         '<tr>'
         f'<td><a href="/calculation?{urlencode({"dataset": row["dataset"], "order": row["order_number"]})}">{html.escape(row["order_number"])}</a></td>'
+        f'<td>{html.escape(row.get("customer_name", ""))}</td>'
         f'<td>{html.escape(_review_focus(row.get("reason_codes", "")))}</td>'
         f'<td>{html.escape(row.get("raw_material_quantity_status", "") or "—")}</td>'
         f'<td>{html.escape(saved.get((row["dataset"], row["order_number"]), {}).get("correction_action", "OFFEN"))}</td>'
         f'<td>{html.escape(saved.get((row["dataset"], row["order_number"]), {}).get("review_status", "OFFEN"))}</td>'
         f'<td>{html.escape(row.get("reason_explanation", ""))}</td></tr>'
         for row in candidates
-    ) or '<tr><td colspan="6">Im aktuellen Lauf sind keine Korrekturkandidaten offen.</td></tr>'
+    ) or '<tr><td colspan="7">Im aktuellen Lauf sind keine Korrekturkandidaten offen.</td></tr>'
     intro = (
-        '<p>Hier stehen Rohwaren-, Leistungs-, Material- und Einzelkostenauffälligkeiten, die '
+        '<p>Hier stehen Rohwaren-, Leistungs-, Material-, Einzelkosten- und kritische Kostenabstimmungsauffälligkeiten, die '
         'akzeptiert oder im führenden System korrigiert werden müssen. Nach neuen CSV-Daten wird '
         'jeder Auftrag im nächsten Lauf erneut beurteilt.</p>'
     )
     return _card(
         f"Korrekturen · Lauf {run_id}",
-        intro + '<table><thead><tr><th>Auftrag</th><th>Prüfpunkt</th><th>Rohwarenstufe</th><th>Entscheidung</th><th>Status</th><th>Systemhinweis</th></tr></thead><tbody>' + table_rows + '</tbody></table>',
+        intro + '<table><thead><tr><th>Auftrag</th><th>Kunde</th><th>Prüfpunkt</th><th>Rohwarenstufe</th><th>Entscheidung</th><th>Status</th><th>Systemhinweis</th></tr></thead><tbody>' + table_rows + '</tbody></table>',
     )
 
 

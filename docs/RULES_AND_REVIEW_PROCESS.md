@@ -11,6 +11,8 @@
 7. Nachproduktionen dürfen negativ sein. Unabhängige Auffälligkeiten bei Material, Leistung oder Buchungen bleiben prüfpflichtig.
 8. Wellkarton wird über die Artikelgruppe `09` erkannt, nicht über einen Artikelnummern-Präfix.
 9. Eine fachliche Rückmeldung wird lokal gespeichert und verändert weder Rohdaten noch Regeln automatisch.
+10. Eine massive Abweichung zwischen **Kosten Ist (Auftragskopf)** und **Kosten errechnet** ist ein Korrekturkandidat. Zu klären ist, ob die Istkosten noch nicht vollständig/aktuell oder die errechneten Detaildaten fehlerhaft sind.
+11. Bei abgeschlossenen Aufträgen (`offen = 0`) werden Liefermenge und Faktura plausibilisiert. Für bepreiste Lieferpositionen gilt grundsätzlich eine Toleranz von ±10 %; Gutschriften erklären eine geringere Liefer- oder Erlösmenge.
 
 ## Was muss geprüft oder bestätigt werden?
 
@@ -21,6 +23,7 @@
 | Vorgeschlagene Begründung bestätigen | System hat Preis-, Zeit-, Material- oder Mehraufwand erkannt | Ursache bestätigen oder fachlich ändern |
 | Korrektur bestätigen | Rohwarenmenge oder Leistungswert liegt außerhalb der akzeptierten Bandbreite | Auffälligkeit akzeptieren oder „Wird korrigiert“ wählen |
 | Kostenabstimmung prüfen | rekonstruierte Kosten weichen erheblich vom Auftragskopf ab | fehlende Kosten/Buchungen klären und begründen |
+| Lieferung/Faktura prüfen | geschlossener Auftrag liegt außerhalb der Mengen- oder Werttoleranz | Lieferung, Gutschrift, Sonderkosten oder Fakturastand klären |
 
 Die Menüseite **Aufträge & Prüfung** führt Auftragsbewertung, Prüfung/Feedback und Korrekturen zusammen. Die Filter **Alle Aufträge**, **Prüfung erforderlich** und **Korrekturen** bestimmen, welche Fälle angezeigt werden. Ein Klick auf die Auftragsnummer öffnet unmittelbar die Nachkalkulation. Dort werden Systembewertung, Prüfauftrag, fachliche Bewertung, Korrekturentscheidung und Abschlussstatus zusammengeführt.
 
@@ -60,13 +63,29 @@ Korrekturkandidaten sind insbesondere:
 
 - Rohwarenmenge `PRUEFEN` oder `KRITISCH`,
 - auffällige Zeit/Leistung,
-- auffälliger Material- oder Einzelkostenaufwand.
+- auffälliger Material- oder Einzelkostenaufwand,
+- kritische Abweichung der Istkosten zu den errechneten Kosten.
 
 **Auffälligkeit akzeptiert** hält fest, dass der Wert fachlich korrekt ist. **Wird korrigiert** hält fest, dass die Korrektur im führenden System erfolgt. Die Anwendung überschreibt keine Quelldaten.
 
 ### Kosten und Sollkosten
 
 Die Istkostenabstimmung rekonstruiert Produktions- und Einzelkosten, ergänzt VV- und Materialzuschläge und vergleicht sie mit dem Auftragskopf. Die theoretischen Sollkosten verwenden ideale Produktionsleistungen und Sollmaterialmengen. Werkzeuge (`WS`, `WKS`) und Eingangsrechnungen fließen nicht in die theoretischen Einzelkosten ein.
+
+Eine Kostenabweichung ist **kritisch**, wenn sowohl der konfigurierte absolute als auch der relative Grenzwert überschritten wird. Der Fall erscheint dann als Korrekturkandidat. Die Kennzeichnung entscheidet nicht automatisch, welche Seite falsch ist: Ursache können ein verspäteter oder unvollständiger Kostenstand im Auftragskopf ebenso wie fehlende, doppelte oder falsche Detailbuchungen sein.
+
+### Lieferung und Faktura bei geschlossenen Aufträgen
+
+Die Prüfung wird nur für Aufträge mit `Auftragskopf.offen = 0` ausgeführt:
+
+- Bepreiste Lieferpositionen werden mit bestellter und gelieferter Menge verglichen. Die normale Bandbreite beträgt 90–110 %.
+- Vorfertigungsteile (Artikelgruppe `13` oder entsprechende Artikelart/-bezeichnung) müssen nicht geliefert werden und sind von der Liefermengenprüfung ausgenommen.
+- Direkt verrechnete Wertpositionen sowie Positionen ohne Preis sind von der Liefermengenprüfung ausgenommen.
+- Bei vorhandener Gutschrift darf die gelieferte Menge unter 90 % liegen; eine Überlieferung über 110 % bleibt auffällig.
+- Der theoretische Positionswert wird je bepreister Position aus Menge × Preis ÷ Preiseinheitsfaktor gebildet. Der Brutto-Rechnungswert wird mit ±10 % dagegen geprüft; Gutschrift und Nettoerlös werden getrennt angezeigt.
+- Sonderkosten werden separat ausgewiesen. Bei einer Fakturaabweichung wird ausdrücklich geprüft, ob Sonderkosten nicht verrechnet wurden.
+
+`Faktura.csv` enthält derzeit nur Auftragssummen. Daher kann die Anwendung eine Abweichung des Gesamtwerts erkennen, aber nicht beweisen, welche einzelne Position nicht fakturiert wurde. Eine positionsgenaue Fakturaprüfung benötigt künftig Fakturapositionen mit Auftrags- und Positionsbezug.
 
 ## Grenzen
 
