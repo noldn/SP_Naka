@@ -111,6 +111,13 @@ class CostingTests(unittest.TestCase):
         self.assertEqual("OK", result["delivery_status"])
         self.assertEqual("OK", result["billing_status"])
 
+        position["gelieferte_Menge"] = "150"
+        overdelivery = _fulfillment_assessment(
+            {"offen": "0"}, [position],
+            [{"Summe_Rechnung_EUR": "1000", "Erloes_EUR": "1000"}],
+        )
+        self.assertEqual("OK", overdelivery["delivery_status"])
+
     def test_open_or_incomplete_faktura_is_marked_without_false_delivery_error(self) -> None:
         position = {
             "PositionsNr": "1", "Artikel": "A", "Menge": "100",

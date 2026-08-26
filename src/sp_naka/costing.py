@@ -123,8 +123,7 @@ def _fulfillment_assessment(
         delivered = _number(row.get("gelieferte_Menge")) or 0.0
         ratio = delivered / quantity
         lower_violation = ratio < 1.0 - DELIVERY_TOLERANCE and not credit_present
-        upper_violation = ratio > 1.0 + DELIVERY_TOLERANCE
-        if lower_violation or upper_violation:
+        if lower_violation:
             delivery_deviations.append({
                 "position": (row.get("PositionsNr") or "").strip(),
                 "article": (row.get("Artikel") or "").strip(),
@@ -729,7 +728,7 @@ def analyze_costs(
             explanations.append("Mindestens einem Sollmaterial konnte kein Preis belastbar zugeordnet werden.")
         if assessment["delivery_status"] == "PRUEFEN":
             explanations.append(
-                f'{assessment["delivery_deviation_count"]} fakturierbare Lieferposition(en) liegen außerhalb der zulässigen Liefermenge von ±10 %. Vorfertigungsteile, Wertpositionen und Positionen ohne Preis sind ausgenommen.'
+                f'{assessment["delivery_deviation_count"]} fakturierbare Lieferposition(en) unterschreiten 90 % der Bestellmenge ohne erklärende Gutschrift. Mehrlieferungen sind zulässig; Vorfertigungsteile, Wertpositionen und Positionen ohne Preis sind ausgenommen.'
             )
         if assessment["credit_note_present"]:
             explanations.append(

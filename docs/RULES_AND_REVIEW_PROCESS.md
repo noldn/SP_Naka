@@ -12,7 +12,7 @@
 8. Wellkarton wird über die Artikelgruppe `09` erkannt, nicht über einen Artikelnummern-Präfix.
 9. Eine fachliche Rückmeldung wird lokal gespeichert und verändert weder Rohdaten noch Regeln automatisch.
 10. Eine massive Abweichung zwischen **Kosten Ist (Auftragskopf)** und **Kosten errechnet** ist ein Korrekturkandidat. Zu klären ist, ob die Istkosten noch nicht vollständig/aktuell oder die errechneten Detaildaten fehlerhaft sind.
-11. Bei abgeschlossenen Aufträgen (`offen = 0`) werden Liefermenge und Faktura plausibilisiert. Für bepreiste Lieferpositionen gilt grundsätzlich eine Toleranz von ±10 %; Gutschriften erklären eine geringere Liefer- oder Erlösmenge.
+11. Bei abgeschlossenen Aufträgen (`offen = 0`) werden Liefermenge und Faktura plausibilisiert. Bepreiste Lieferpositionen dürfen mehr als 110 % erreichen; eine Unterschreitung unter 90 % ist nur mit Gutschrift zulässig.
 
 ## Was muss geprüft oder bestätigt werden?
 
@@ -78,10 +78,10 @@ Eine Kostenabweichung ist **kritisch**, wenn sowohl der konfigurierte absolute a
 
 Die Prüfung wird nur für Aufträge mit `Auftragskopf.offen = 0` ausgeführt:
 
-- Bepreiste Lieferpositionen werden mit bestellter und gelieferter Menge verglichen. Die normale Bandbreite beträgt 90–110 %.
+- Bepreiste Lieferpositionen werden mit bestellter und gelieferter Menge verglichen. Mehrlieferungen – auch über 110 % – sind zulässig.
 - Vorfertigungsteile (Artikelgruppe `13` oder entsprechende Artikelart/-bezeichnung) müssen nicht geliefert werden und sind von der Liefermengenprüfung ausgenommen.
 - Direkt verrechnete Wertpositionen sowie Positionen ohne Preis sind von der Liefermengenprüfung ausgenommen.
-- Bei vorhandener Gutschrift darf die gelieferte Menge unter 90 % liegen; eine Überlieferung über 110 % bleibt auffällig.
+- Unter 90 % der Bestellmenge wird die Position geprüft. Bei vorhandener Gutschrift ist diese Unterschreitung zulässig.
 - Der theoretische Positionswert wird je bepreister Position aus Menge × Preis ÷ Preiseinheitsfaktor gebildet. Der Brutto-Rechnungswert wird mit ±10 % dagegen geprüft; Gutschrift und Nettoerlös werden getrennt angezeigt.
 - Sonderkosten werden separat ausgewiesen. Bei einer Fakturaabweichung wird ausdrücklich geprüft, ob Sonderkosten nicht verrechnet wurden.
 

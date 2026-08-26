@@ -765,7 +765,7 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
     ]
     fulfillment = _data_table(
         fulfillment_rows, (("Prüfpunkt", "label"), ("Wert/Status", "value"))
-    ) + '<p class="hint">Liefermengen: ±10 %. Gutschriften erlauben eine geringere Menge. Vorfertigungsteile, Wertpositionen und Positionen ohne Preis sind ausgenommen. Die Fakturaquelle liegt nur aggregiert je Auftrag vor.</p>'
+    ) + '<p class="hint">Liefermengen: Unter 90 % nur mit Gutschrift; Mehrlieferungen über 110 % sind zulässig. Vorfertigungsteile, Wertpositionen und Positionen ohne Preis sind ausgenommen. Die Fakturaquelle liegt nur aggregiert je Auftrag vor.</p>'
     if delivery_rows:
         fulfillment += '<details open><summary>Abweichende Lieferpositionen</summary>' + _data_table(
             delivery_rows,
