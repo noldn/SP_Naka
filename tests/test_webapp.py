@@ -203,6 +203,9 @@ class WebApplicationTests(unittest.TestCase):
         self.assertNotIn("davon Lagerkosten", page)
         self.assertIn("Summe Produktionskosten", page)
         self.assertIn("Summe Einzelkosten", page)
+        self.assertIn("Lieferung und Faktura", page)
+        self.assertIn("NICHT_RELEVANT", page)
+        self.assertIn("Stanzform neu im Datenzeitraum", page)
         self.assertIn("<strong>12,35 EUR</strong>", page)
         self.assertIn("<strong>-250,00 EUR</strong>", page)
 

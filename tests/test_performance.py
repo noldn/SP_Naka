@@ -126,6 +126,14 @@ class PerformanceTests(unittest.TestCase):
         self.assertGreater(rows[0]["total_material_share_of_revenue"], 0)
         self.assertEqual(5, summary["training_orders"])
 
+    def test_first_observed_die_form_remains_visible(self) -> None:
+        rows, _ = analyze_performance(
+            self.reference, self.scoring, self.parameters, self.customers, "test"
+        )
+
+        self.assertTrue(rows[0]["first_observed_die_form"])
+        self.assertIn("ERSTE_STANZFORM_OHNE_WS_HINWEIS", rows[0]["reason_codes"])
+
     def test_quantity_bucket_boundary_is_inclusive(self) -> None:
         self.assertEqual("1-1000", _quantity_bucket(1000, [1000, 5000]))
         self.assertEqual("1001-5000", _quantity_bucket(1000.01, [1000, 5000]))

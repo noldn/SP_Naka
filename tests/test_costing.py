@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from sp_naka.costing import assess_order_costs, is_afterproduction
+from sp_naka.costing import _commercial_assessment, assess_order_costs, is_afterproduction
 
 
 def write_csv(path: Path, headers: list[str], rows: list[list[object]]) -> None:
@@ -71,6 +71,65 @@ class CostingTests(unittest.TestCase):
     def test_reconciliation_thresholds_require_absolute_and_relative_limit(self) -> None:
         self.assertEqual("WARNUNG", self._assessment("400")["reconciliation_status"])
         self.assertEqual("KRITISCH", self._assessment("30")["reconciliation_status"])
+
+    def test_closed_order_uses_delivered_quantity_for_billing(self) -> None:
+        positions = [
+            {"PositionsNr": "1", "Artikel": "A", "Menge": "100", "gelieferte_Menge": "115", "EinzelpreismZuAbschl": "10", "Preiseinheitsfaktor": "1", "WertPosition": "0", "ArtikelGruppe": "01"},
+            {"PositionsNr": "2", "Artikel": "ZK", "Menge": "1", "gelieferte_Menge": "0", "EinzelpreismZuAbschl": "100", "Preiseinheitsfaktor": "1", "WertPosition": "1", "ArtikelGruppe": "30", "ArtikelGruppeBez": "Sonderkosten"},
+            {"PositionsNr": "3", "Artikel": "OHNE", "Menge": "10", "gelieferte_Menge": "0", "EinzelpreismZuAbschl": "0", "Preiseinheitsfaktor": "1", "WertPosition": "0"},
+        ]
+
+        result = _commercial_assessment(
+            {"offen": "0"}, positions,
+            [{"Summe_Rechnung_EUR": "1250", "Summe_Gutschrift_EUR": "0", "Erloes_EUR": "1250", "Anzahl_Gutschriften": "0"}],
+        )
+
+        self.assertEqual(1250.0, result["theoretical_billing_value"])
+        self.assertEqual("OK", result["delivery_status"])
+        self.assertEqual("OK", result["billing_status"])
+        self.assertEqual(100.0, result["special_cost_value"])
+        self.assertEqual("OK", result["special_cost_status"])
+
+    def test_underdelivery_requires_review_only_without_credit(self) -> None:
+        position = {"PositionsNr": "1", "Artikel": "A", "Menge": "100", "gelieferte_Menge": "89.99", "Einzelpreis": "10", "Preiseinheitsfaktor": "1", "WertPosition": "0"}
+
+        without_credit = _commercial_assessment({"offen": "0"}, [position], [])
+        with_credit = _commercial_assessment(
+            {"offen": "0"}, [position],
+            [{"Summe_Rechnung_EUR": "899.90", "Summe_Gutschrift_EUR": "100", "Erloes_EUR": "799.90", "Anzahl_Gutschriften": "1"}],
+        )
+
+        self.assertEqual("PRUEFEN", without_credit["delivery_status"])
+        self.assertEqual("OK_MIT_GUTSCHRIFT", with_credit["delivery_status"])
+
+        position["gelieferte_Menge"] = "90"
+        boundary = _commercial_assessment({"offen": "0"}, [position], [])
+        self.assertEqual("OK", boundary["delivery_status"])
+
+    def test_billing_rounding_tolerance_and_special_cost_review(self) -> None:
+        position = {"PositionsNr": "1", "Artikel": "ZK", "Menge": "1", "gelieferte_Menge": "0", "Einzelpreis": "100", "Preiseinheitsfaktor": "1", "WertPosition": "1", "ArtikelGruppe": "30"}
+
+        boundary = _commercial_assessment(
+            {"offen": "0"}, [position],
+            [{"Summe_Rechnung_EUR": "101", "Erloes_EUR": "101"}],
+        )
+        mismatch = _commercial_assessment(
+            {"offen": "0"}, [position],
+            [{"Summe_Rechnung_EUR": "101.01", "Erloes_EUR": "101.01"}],
+        )
+
+        self.assertEqual("OK", boundary["billing_status"])
+        self.assertEqual("PRUEFEN", mismatch["billing_status"])
+        self.assertEqual("PRUEFEN", mismatch["special_cost_status"])
+
+    def test_open_order_and_missing_faktura_are_distinguished(self) -> None:
+        position = {"PositionsNr": "1", "Artikel": "A", "Menge": "100", "gelieferte_Menge": "100", "Einzelpreis": "10", "Preiseinheitsfaktor": "1", "WertPosition": "0"}
+
+        open_order = _commercial_assessment({"offen": "1"}, [position], [])
+        closed_order = _commercial_assessment({"offen": "0"}, [position], [])
+
+        self.assertEqual("OFFENER_AUFTRAG", open_order["billing_status"])
+        self.assertEqual("PRUEFEN_DATEN_FEHLEN", closed_order["billing_status"])
 
     def test_afterproduction_spelling_variants_use_prefix(self) -> None:
         self.assertTrue(is_afterproduction("Nachproduktion"))

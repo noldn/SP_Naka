@@ -12,6 +12,8 @@
 8. Wellkarton wird über die Artikelgruppe `09` erkannt, nicht über einen Artikelnummern-Präfix.
 9. Eine fachliche Rückmeldung wird lokal gespeichert und verändert weder Rohdaten noch Regeln automatisch.
 10. Eine massive Abweichung zwischen **Kosten Ist (Auftragskopf)** und **Kosten errechnet** ist ein Korrekturkandidat. Zu klären ist, ob die Istkosten noch nicht vollständig/aktuell oder die errechneten Detaildaten fehlerhaft sind.
+11. Bei abgeschlossenen Aufträgen (`offen = 0`) werden Unterlieferungen und die Fakturasumme geprüft. Mehrlieferungen sind zulässig; Positionen unter 90 % benötigen eine Gutschrift oder fachliche Klärung.
+12. Eine erstmals im gelieferten Datenzeitraum beobachtete Stanzform bleibt als Näherungswert sichtbar. Sie wird in der Auftragsliste zusätzlich in einer eigenen Spalte angezeigt.
 
 ## Was muss geprüft oder bestätigt werden?
 
@@ -22,6 +24,7 @@
 | Vorgeschlagene Begründung bestätigen | System hat Preis-, Zeit-, Material- oder Mehraufwand erkannt | Ursache bestätigen oder fachlich ändern |
 | Korrektur bestätigen | Rohwarenmenge oder Leistungswert liegt außerhalb der akzeptierten Bandbreite | Auffälligkeit akzeptieren oder „Wird korrigiert“ wählen |
 | Kostenabstimmung prüfen | rekonstruierte Kosten weichen erheblich vom Auftragskopf ab | fehlende Kosten/Buchungen klären und begründen |
+| Lieferung/Faktura prüfen | geschlossener Auftrag hat eine Unterlieferung ohne Gutschrift oder eine abweichende Fakturasumme | Lieferung, Gutschrift, Nachbesserung, Sonderkosten oder Datenfehler klären |
 
 Die Menüseite **Aufträge & Prüfung** führt Auftragsbewertung, Prüfung/Feedback und Korrekturen zusammen. Die Filter **Alle Aufträge**, **Prüfung erforderlich** und **Korrekturen** bestimmen, welche Fälle angezeigt werden. Ein Klick auf die Auftragsnummer öffnet unmittelbar die Nachkalkulation. Dort werden Systembewertung, Prüfauftrag, fachliche Bewertung, Korrekturentscheidung und Abschlussstatus zusammengeführt.
 
@@ -71,6 +74,26 @@ Korrekturkandidaten sind insbesondere:
 Die Istkostenabstimmung rekonstruiert Produktions- und Einzelkosten, ergänzt VV- und Materialzuschläge und vergleicht sie mit dem Auftragskopf. Die theoretischen Sollkosten verwenden ideale Produktionsleistungen und Sollmaterialmengen. Werkzeuge (`WS`, `WKS`) und Eingangsrechnungen fließen nicht in die theoretischen Einzelkosten ein.
 
 Eine Kostenabweichung ist **kritisch**, wenn sowohl der konfigurierte absolute als auch der relative Grenzwert überschritten wird. Der Fall erscheint dann als Korrekturkandidat. Die Kennzeichnung entscheidet nicht automatisch, welche Seite falsch ist: Ursache können ein verspäteter oder unvollständiger Kostenstand im Auftragskopf ebenso wie fehlende, doppelte oder falsche Detailbuchungen sein.
+
+### Lieferung und Faktura
+
+Die Prüfung gilt nur für abgeschlossene Aufträge mit `Auftragskopf.offen = 0`:
+
+- Positionen ohne positiven Preis oder ohne gültigen Preiseinheitsfaktor werden nicht bewertet.
+- Vorfertigungsteile (Artikelgruppe `13` beziehungsweise Bezeichnung „Vorfertigungsteile“) und direkte Wertpositionen werden nicht auf Liefermenge geprüft.
+- Normale bepreiste Positionen unter 90 % der Bestellmenge werden ohne Gutschrift zur Prüfung vorgelegt. Genau 90 % ist zulässig. Mehrlieferungen werden nicht beanstandet, auch wenn sie deutlich über 110 % liegen.
+- Bei einer Gutschrift darf die Liefermenge niedriger sein. Aussortieren oder Nachbesserung kann außerdem zu mehrfach gemeldeten Liefermengen führen; diese werden nicht automatisch als Fehler bewertet.
+- Der theoretische Fakturawert normaler Artikel wird aus `gelieferte_Menge × EinzelpreismZuAbschl ÷ Preiseinheitsfaktor` berechnet. Falls der Abschlusspreis fehlt, wird `Einzelpreis` verwendet.
+- Direkte Wert- und Sonderkostenpositionen werden aus `Menge × Preis ÷ Preiseinheitsfaktor` berechnet, weil sie nicht zwingend über eine Liefermenge fakturiert werden.
+- Die Bruttorechnung aus `Faktura.Summe_Rechnung_EUR` wird mit dem theoretischen Fakturawert verglichen. Abweichungen bis einschließlich 1,00 EUR gelten als Rundungstoleranz.
+- Gutschrift und Nettoerlös werden getrennt angezeigt. Eine Gutschrift erklärt eine Abweichung, hebt eine weiterhin bestehende Brutto-Summenabweichung aber nicht automatisch auf.
+- Bei vorhandenen Sonderkosten und einer Fakturaabweichung wird ausdrücklich geprüft, ob die Sonderkosten verrechnet wurden.
+
+`Faktura.csv` enthält nur Summen je Auftrag. Die Anwendung kann deshalb eine Summenabweichung erkennen, aber nicht sicher bestimmen, welche einzelne Position fehlt. Dafür wären Fakturapositionen mit Auftrags- und Positionsbezug notwendig.
+
+### Stanzform neu
+
+`Planung.STANZFORM` wird weiterhin ausgewertet. „Stanzform neu“ bedeutet, dass die Stanzform im bereitgestellten historischen Zeitraum erstmals am Datum des Auftrags beobachtet wird. Das ist wegen des begrenzten Datenzeitraums ein Hinweis und kein Beweis für eine tatsächlich neu beschaffte Stanzform. Ein vorhandener WS-Artikel aus den Rechnungskontrollen wird separat berücksichtigt.
 
 ## Grenzen
 

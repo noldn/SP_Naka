@@ -17,6 +17,8 @@ RAW_GROUPS = {"01", "02", "03"}
 MINIMUM_IDEAL_PEERS = 5
 LAGER_COST_TYPE = "250950"
 FREIGHT_COST_TYPES = {"7300", "7310", "7315"}
+DELIVERY_MINIMUM_RATIO = 0.90
+BILLING_ROUNDING_TOLERANCE_EUR = 1.00
 COST_REQUIRED_FILES = {
     "Auftragskopf.csv", "VertriebsPositionen.csv", "ProdZeiten.csv",
     "Fertigungsmaterial.csv", "RohwarenPos.csv", "RW_Buchungen.csv",
@@ -32,6 +34,10 @@ COST_FIELDS = [
     "theoretical_invoice_cost_eur",
     "theoretical_total_cost_eur", "theoretical_result_eur", "theoretical_complete",
     "price_critical", "afterproduction_detected", "manual_review_required",
+    "order_closed", "delivery_status", "delivery_deviation_count",
+    "billing_status", "theoretical_billing_value_eur", "invoiced_value_eur",
+    "credited_value_eur", "billed_revenue_eur", "billing_difference_eur",
+    "credit_note_present", "special_cost_value_eur", "special_cost_status",
     "reason_codes", "reason_explanation",
 ]
 
@@ -77,6 +83,112 @@ def _group(row: dict[str, str]) -> str:
 
 def _article(row: dict[str, str]) -> str:
     return (row.get("Artikel") or "").strip().upper()
+
+
+def _commercial_assessment(
+    header: dict[str, str],
+    positions: list[dict[str, str]],
+    billing: list[dict[str, str]],
+) -> dict[str, object]:
+    """Check delivery and aggregate billing only for completed orders."""
+    closed = (header.get("offen") or "").strip() == "0"
+    bill = billing[0] if len(billing) == 1 else {}
+    invoice = _number(bill.get("Summe_Rechnung_EUR"))
+    credit = _number(bill.get("Summe_Gutschrift_EUR")) or 0.0
+    billed_revenue = _number(bill.get("Erloes_EUR"))
+    credit_present = (
+        (_number(bill.get("Anzahl_Gutschriften")) or 0.0) > 0
+        or abs(credit) > 0.005
+    )
+    theoretical_billing = 0.0
+    special_cost = 0.0
+    priced_positions = 0
+    delivery_deviations: list[dict[str, object]] = []
+    credited_underdeliveries = 0
+
+    for row in positions:
+        price = _number(row.get("EinzelpreismZuAbschl"))
+        if price is None:
+            price = _number(row.get("Einzelpreis"))
+        factor = _number(row.get("Preiseinheitsfaktor"))
+        ordered = _number(row.get("Menge"))
+        delivered = _number(row.get("gelieferte_Menge"))
+        if price is None or price <= 0 or factor is None or factor <= 0 or ordered is None or ordered <= 0:
+            continue
+
+        priced_positions += 1
+        delivered = delivered or 0.0
+        value_position = (row.get("WertPosition") or "").strip() == "1"
+        group_code = (row.get("ArtikelGruppe") or "").strip().zfill(2)
+        group_name = (row.get("ArtikelGruppeBez") or "").strip().casefold()
+        preproduction = group_code == "13" or "vorfertigung" in group_name
+        special = group_code == "30" or "sonderkosten" in group_name
+
+        # Direct value/special-cost positions are billed from the ordered value;
+        # normal articles are billed from the actually delivered quantity.
+        billing_quantity = ordered if value_position else delivered
+        position_value = billing_quantity * price / factor
+        theoretical_billing += position_value
+        if special:
+            special_cost += ordered * price / factor
+
+        if not closed or value_position or preproduction:
+            continue
+        if delivered / ordered < DELIVERY_MINIMUM_RATIO:
+            if credit_present:
+                credited_underdeliveries += 1
+            else:
+                delivery_deviations.append({
+                    "position": (row.get("PositionsNr") or "").strip(),
+                    "article": (row.get("Artikel") or "").strip(),
+                    "ordered": ordered,
+                    "delivered": delivered,
+                    "ratio": delivered / ordered,
+                })
+
+    theoretical_billing = _round(theoretical_billing)
+    special_cost = _round(special_cost)
+    difference = (
+        _round(invoice - theoretical_billing)
+        if invoice is not None and theoretical_billing > 0 else None
+    )
+    billing_mismatch = difference is not None and abs(difference) > BILLING_ROUNDING_TOLERANCE_EUR
+
+    if not closed:
+        delivery_status = "OFFENER_AUFTRAG"
+        billing_status = "OFFENER_AUFTRAG"
+    else:
+        delivery_status = "PRUEFEN" if delivery_deviations else (
+            "OK_MIT_GUTSCHRIFT" if credited_underdeliveries else "OK"
+        )
+        if priced_positions == 0:
+            billing_status = "NICHT_RELEVANT"
+        elif len(billing) != 1 or invoice is None:
+            billing_status = "PRUEFEN_DATEN_FEHLEN"
+        elif billing_mismatch:
+            billing_status = "PRUEFEN_MIT_GUTSCHRIFT" if credit_present else "PRUEFEN"
+        else:
+            billing_status = "OK_MIT_GUTSCHRIFT" if credit_present else "OK"
+
+    special_status = "NICHT_RELEVANT"
+    if closed and special_cost > 0:
+        special_status = "PRUEFEN" if billing_status.startswith("PRUEFEN") else "OK"
+    return {
+        "order_closed": closed,
+        "delivery_status": delivery_status,
+        "delivery_deviations": delivery_deviations,
+        "delivery_deviation_count": len(delivery_deviations),
+        "credited_underdeliveries": credited_underdeliveries,
+        "billing_status": billing_status,
+        "theoretical_billing_value": theoretical_billing,
+        "invoiced_value": invoice,
+        "credited_value": credit,
+        "billed_revenue": billed_revenue,
+        "billing_difference": difference,
+        "credit_note_present": credit_present,
+        "special_cost_value": special_cost,
+        "special_cost_status": special_status,
+    }
 
 
 def _round(value: float) -> float:
@@ -452,6 +564,7 @@ def assess_order_costs(
     cost_bookings: list[dict[str, str]],
     reference_dir: Path | None = None,
     reference_profiles: dict[tuple[str, str, str, str], list[tuple[str, float]]] | None = None,
+    billing: list[dict[str, str]] | None = None,
 ) -> dict[str, object]:
     order = (header.get("BelegNummer") or "").strip()
     official = _number(header.get("Kosten"))
@@ -497,6 +610,7 @@ def assess_order_costs(
     complete = bool(theory_material["complete"])
     price_critical = bool(complete and theoretical_result is not None and theoretical_result <= 0)
     afterproduction = is_afterproduction(header.get("Zusatztext"))
+    commercial = _commercial_assessment(header, positions, billing or [])
     reason_codes = []
     if reconciliation in {"WARNUNG", "KRITISCH"}:
         reason_codes.append(f"KOSTENABSTIMMUNG_{reconciliation}")
@@ -506,6 +620,14 @@ def assess_order_costs(
         reason_codes.append("PREIS_KRITISCH")
     if not complete:
         reason_codes.append("THEORETISCHE_KOSTEN_UNVOLLSTAENDIG")
+    if commercial["delivery_status"] == "PRUEFEN":
+        reason_codes.append("LIEFERMENGE_UNTER_90_OHNE_GUTSCHRIFT")
+    if str(commercial["billing_status"]).startswith("PRUEFEN"):
+        reason_codes.append("FAKTURAWERT_ABWEICHUNG")
+        if commercial["credit_note_present"]:
+            reason_codes.append("GUTSCHRIFT_ALS_ABWEICHUNGSGRUND")
+    if commercial["special_cost_status"] == "PRUEFEN":
+        reason_codes.append("SONDERKOSTEN_FAKTURA_PRUEFEN")
     return {
         "actual_material_cost": material,
         "actual_raw_material_cost": raw_actual,
@@ -543,6 +665,7 @@ def assess_order_costs(
         "theoretical_material_details": theory_material["details"],
         "theoretical_production_details": theory_production["details"],
         "missing_theoretical_articles": theory_material["missing_articles"],
+        **commercial,
         "reason_codes": reason_codes,
     }
 
@@ -581,6 +704,7 @@ def analyze_costs(
         "raw_bookings": _by_order(_read(source / "RW_Buchungen.csv"), "BelegNummer"),
         "invoices": _by_order(_read(source / "Rechnungskontrollen.csv"), "Traeger"),
         "ktr": _by_order(_read(source / "KTRBuchungenKI.csv"), "KostenTraeger"),
+        "billing": _by_order(_read(source / "Faktura.csv"), "Auftrag") if (source / "Faktura.csv").is_file() else {},
     }
     # Build and cache the reference once before iterating over orders.
     excluded_data_errors = confirmed_data_error_orders(order_clarifications_path)
@@ -601,6 +725,7 @@ def analyze_costs(
             sources["ktr"].get(order, []),
             reference,
             profiles,
+            sources["billing"].get(order, []),
         )
         codes = list(assessment["reason_codes"])
         explanations = []
@@ -616,6 +741,22 @@ def analyze_costs(
             explanations.append("Auch mit Sollmaterial und Idealleistung bleibt das theoretische Ergebnis negativ oder null; der Preis ist ein kritischer Faktor.")
         if not assessment["theoretical_complete"]:
             explanations.append("Mindestens einem Sollmaterial konnte kein Preis belastbar zugeordnet werden.")
+        if assessment["delivery_status"] == "PRUEFEN":
+            explanations.append(
+                f'{assessment["delivery_deviation_count"]} bepreiste Lieferposition(en) liegen unter 90 % der Bestellmenge und es gibt keine Gutschrift. Vorfertigungsteile, Wertpositionen und Positionen ohne Preis sind ausgenommen; Mehrlieferungen sind zulässig.'
+            )
+        if str(assessment["billing_status"]).startswith("PRUEFEN"):
+            explanations.append(
+                "Die Bruttorechnung weicht um mehr als 1,00 EUR vom theoretischen Fakturawert aus tatsächlich gelieferter Menge mal Positionspreis ab oder die Fakturazusammenfassung fehlt/ist nicht eindeutig."
+            )
+        if "GUTSCHRIFT_ALS_ABWEICHUNGSGRUND" in codes:
+            explanations.append(
+                f'Eine Gutschrift über {float(assessment["credited_value"]):.2f} EUR kann die Abweichung durch Aussortieren oder Nachbesserung erklären; der Fall bleibt wegen der Summenabweichung prüfpflichtig.'
+            )
+        if assessment["special_cost_status"] == "PRUEFEN":
+            explanations.append(
+                "Bepreiste Sonderkosten sind vorhanden. Da die Fakturaquelle nur Auftragssummen enthält, muss bei der Summenabweichung geprüft werden, ob die Sonderkosten verrechnet wurden."
+            )
         construction_data_order = (header.get("AuftragsArt") or "").strip().upper() in {"M", "B"}
         manual = assessment["reconciliation_status"] in {"WARNUNG", "KRITISCH"} or not bool(
             assessment["theoretical_complete"]
@@ -624,6 +765,9 @@ def analyze_costs(
             and not assessment["afterproduction_detected"]
             and not construction_data_order
         )
+        manual |= assessment["delivery_status"] == "PRUEFEN" or str(
+            assessment["billing_status"]
+        ).startswith("PRUEFEN")
         statuses[str(assessment["reconciliation_status"])] += 1
         output.append({
             "run_id": run_id,
@@ -649,6 +793,18 @@ def analyze_costs(
             "theoretical_complete": assessment["theoretical_complete"],
             "price_critical": assessment["price_critical"],
             "afterproduction_detected": assessment["afterproduction_detected"],
+            "order_closed": assessment["order_closed"],
+            "delivery_status": assessment["delivery_status"],
+            "delivery_deviation_count": assessment["delivery_deviation_count"],
+            "billing_status": assessment["billing_status"],
+            "theoretical_billing_value_eur": assessment["theoretical_billing_value"],
+            "invoiced_value_eur": assessment["invoiced_value"],
+            "credited_value_eur": assessment["credited_value"],
+            "billed_revenue_eur": assessment["billed_revenue"],
+            "billing_difference_eur": assessment["billing_difference"],
+            "credit_note_present": assessment["credit_note_present"],
+            "special_cost_value_eur": assessment["special_cost_value"],
+            "special_cost_status": assessment["special_cost_status"],
             "manual_review_required": manual,
             "reason_codes": "|".join(codes),
             "reason_explanation": " | ".join(explanations) or "Kostenabstimmung und theoretische Kosten ohne zusätzlichen Hinweis.",

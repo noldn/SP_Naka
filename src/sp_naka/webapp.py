@@ -52,7 +52,9 @@ KNOWN_REASON_CODES = {
     "SERIENKANDIDAT", "ROHWARENMENGE_HINWEIS", "ROHWARENMENGE_PRUEFEN",
     "ROHWARENMENGE_KRITISCH", "PREIS_KRITISCH",
     "THEORETISCHE_KOSTEN_UNVOLLSTAENDIG", "KOSTENABSTIMMUNG_WARNUNG",
-    "KOSTENABSTIMMUNG_KRITISCH",
+    "KOSTENABSTIMMUNG_KRITISCH", "LIEFERMENGE_UNTER_90_OHNE_GUTSCHRIFT",
+    "FAKTURAWERT_ABWEICHUNG", "GUTSCHRIFT_ALS_ABWEICHUNGSGRUND",
+    "SONDERKOSTEN_FAKTURA_PRUEFEN",
 }
 CLARIFICATION_FIELDS = [
     "dataset", "order_number", "professional_assessment", "review_status",
@@ -741,6 +743,40 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
             ("Netto", "GesamtNetto"), ("Muster", "Muster"),
         ),
     )
+    commercial_rows = [
+        {"label": "Auftrag abgeschlossen (offen=0)", "value": "JA" if cost_assessment["order_closed"] else "NEIN"},
+        {"label": "Liefermengenprüfung", "value": str(cost_assessment["delivery_status"])},
+        {"label": "Theoretischer Fakturawert", "value": _optional_number(cost_assessment["theoretical_billing_value"], "money")},
+        {"label": "Bruttorechnung", "value": _optional_number(cost_assessment["invoiced_value"], "money")},
+        {"label": "Differenz Bruttorechnung", "value": _optional_number(cost_assessment["billing_difference"], "money")},
+        {"label": "Gutschriften", "value": _optional_number(cost_assessment["credited_value"], "money")},
+        {"label": "Fakturierter Nettoerlös", "value": _optional_number(cost_assessment["billed_revenue"], "money")},
+        {"label": "Fakturaprüfung", "value": str(cost_assessment["billing_status"])},
+        {"label": "Sonderkosten laut Auftrag", "value": _optional_number(cost_assessment["special_cost_value"], "money")},
+        {"label": "Sonderkostenprüfung", "value": str(cost_assessment["special_cost_status"])},
+    ]
+    commercial = _data_table(
+        commercial_rows, (("Prüfpunkt", "label"), ("Wert/Status", "value"))
+    ) + (
+        '<p class="hint">Theoretischer Fakturawert: normale Artikel aus gelieferter Menge × Preis, '
+        'direkte Wert-/Sonderkostenpositionen aus Bestellmenge × Preis. Positionen ohne Preis werden '
+        'nicht bewertet. Unterlieferungen unter 90 % sind ohne Gutschrift prüfpflichtig; Mehrlieferungen '
+        'werden nicht beanstandet. Die Fakturaquelle enthält nur Summen je Auftrag.</p>'
+    )
+    if cost_assessment["delivery_deviations"]:
+        delivery_rows = [
+            {
+                "position": row["position"], "article": row["article"],
+                "ordered": _optional_number(row["ordered"]),
+                "delivered": _optional_number(row["delivered"]),
+                "ratio": _optional_number(row["ratio"], "ratio"),
+            }
+            for row in cost_assessment["delivery_deviations"]
+        ]
+        commercial += '<details open><summary>Zu prüfende Lieferpositionen</summary>' + _data_table(
+            delivery_rows,
+            (("Pos.", "position"), ("Artikel", "article"), ("Bestellt", "ordered"), ("Geliefert", "delivered"), ("Quote", "ratio")),
+        ) + '</details>'
     production_summary = calculation["production_summary"]
     for row in production_summary:
         row["duration_display"] = _optional_number(row.get("duration"))
@@ -932,6 +968,8 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
             ) if automated.get("manual_review_required") == "True" else "Keine Bestätigung erforderlich",
         ),
         ("System-Prüfstatus", automated.get("reason_review_status") or "—"),
+        ("Stanzform", automated.get("die_form") or "—"),
+        ("Stanzform neu im Datenzeitraum", "JA" if automated.get("first_observed_die_form") == "True" else "NEIN"),
         (
             "Reason Codes",
             automated.get("reason_codes")
@@ -980,6 +1018,7 @@ def _calculation_page(app: WebApplication, params: dict[str, list[str]]) -> str:
         + _card("Nachkalkulation", identity + summary, "calculation-sheet")
         + note
         + _card("Auftragspositionen", positions)
+        + _card("Lieferung und Faktura", commercial)
         + _card("Produktionsleistungen/-zeiten", production + f'<details><summary>Einzelmeldungen anzeigen ({len(calculation["production"])})</summary>{production_details}</details>')
         + _card("Einzelkosten aus gelieferten Quellen", individual)
         + _card("Istkostenabstimmung", cost_sources)
@@ -1011,6 +1050,10 @@ def _review_focus(codes: str, review_status: str = "") -> str:
         return "Rohwarenkorrektur prüfen und entscheiden"
     if values.intersection({"LEISTUNG_ZEIT_AUFFAELLIG", "MATERIALAUFWAND_AUFFAELLIG", "EINZELKOSTEN_AUFFAELLIG"}):
         return "Leistung, Material bzw. Einzelkosten prüfen"
+    if "LIEFERMENGE_UNTER_90_OHNE_GUTSCHRIFT" in values:
+        return "Unterlieferung ohne Gutschrift prüfen"
+    if values.intersection({"FAKTURAWERT_ABWEICHUNG", "SONDERKOSTEN_FAKTURA_PRUEFEN"}):
+        return "Faktura und Sonderkosten prüfen"
     if any(value.startswith("KOSTENABSTIMMUNG_") for value in values):
         return "Kostenabstimmung begründen"
     if "PREIS_KRITISCH" in values:
@@ -1168,6 +1211,7 @@ def _order_rows(app: WebApplication, run_dir: Path, only_review: bool, query: st
             "order_number": order,
             "description": descriptions.get(order, ""),
             "customer_name": customers.get(order, ""),
+            "first_observed_die_form": p.get("first_observed_die_form", "False"),
             "dataset": dataset,
             "review_required": "JA" if any(
                 row.get("manual_review_required") == "True" for row in (p, s, c)
@@ -1197,20 +1241,20 @@ def _orders_page(app: WebApplication, params: dict[str, list[str]], only_review:
     }
     table_rows = "".join(
         f'<tr><td><a href="/calculation?{urlencode({"dataset":row["dataset"],"order":row["order_number"]})}">{html.escape(row["order_number"])}</a></td>'
-        f'<td>{html.escape(row.get("customer_name", ""))}</td><td>{html.escape(row.get("description", ""))}</td><td><span class="status {html.escape(row.get("performance_status", "").lower())}">{html.escape(row.get("performance_status", ""))}</span></td>'
+        f'<td>{html.escape(row.get("customer_name", ""))}</td><td>{html.escape(row.get("description", ""))}</td><td>{"JA" if row.get("first_observed_die_form") == "True" else "NEIN"}</td><td><span class="status {html.escape(row.get("performance_status", "").lower())}">{html.escape(row.get("performance_status", ""))}</span></td>'
         f'<td><strong>{html.escape(row["review_required"])}</strong></td><td>{html.escape(row["review_focus"] if row["review_required"] == "JA" else "Keine Bestätigung nötig")}</td>'
         f'<td>{html.escape(clarifications.get((row["dataset"], row["order_number"]), {}).get("correction_action", "OFFEN"))}</td>'
         f'<td>{html.escape(clarifications.get((row["dataset"], row["order_number"]), {}).get("review_status", "OFFEN"))}</td>'
         f'<td>{html.escape(row.get("reconciliation_status", ""))}</td><td>{html.escape(row.get("overall_status", ""))}</td><td>{html.escape(row.get("reason_explanation", row.get("reasons", "")))}</td></tr>'
         for row in rows
-    ) or '<tr><td colspan="11">Keine passenden Aufträge</td></tr>'
+    ) or '<tr><td colspan="12">Keine passenden Aufträge</td></tr>'
     filters = '<div class="view-filters">' + "".join(
         f'<a class="nav-item {"active" if view == key else ""}" href="/orders?{urlencode({"run": run_id, "view": key, "q": query})}">{label}</a>'
         for key, label in (("all", "Alle Aufträge"), ("review", "Prüfung erforderlich"), ("corrections", "Korrekturen"))
     ) + '</div>'
     search = f'<form method="get" class="search"><input type="hidden" name="run" value="{html.escape(run_id)}"><input type="hidden" name="view" value="{html.escape(view)}"><input name="q" value="{html.escape(query)}" placeholder="Auftrag, Kunde oder Beschreibung"><button>Suchen</button></form>'
     intro = '<p class="hint">Einheitliche Auftragsliste: Filter auswählen und über die Auftragsnummer direkt in der Nachkalkulation prüfen, begründen oder eine Korrekturentscheidung erfassen.</p>'
-    return _card(f"Lauf {run_id}", intro + filters + search + f'<table><thead><tr><th>Auftrag</th><th>Kunde</th><th>Zusatzbeschreibung</th><th>Performance</th><th>Prüfung</th><th>Zu prüfen / bestätigen</th><th>Korrektur</th><th>Status</th><th>Kostenabstimmung</th><th>Statisch</th><th>Begründung</th></tr></thead><tbody>{table_rows}</tbody></table>')
+    return _card(f"Lauf {run_id}", intro + filters + search + f'<table><thead><tr><th>Auftrag</th><th>Kunde</th><th>Zusatzbeschreibung</th><th>Stanzform neu</th><th>Performance</th><th>Prüfung</th><th>Zu prüfen / bestätigen</th><th>Korrektur</th><th>Status</th><th>Kostenabstimmung</th><th>Statisch</th><th>Begründung</th></tr></thead><tbody>{table_rows}</tbody></table>')
 
 
 def _order_detail(app: WebApplication, params: dict[str, list[str]]) -> str:
@@ -1223,13 +1267,19 @@ def _order_detail(app: WebApplication, params: dict[str, list[str]]) -> str:
         return _card("Auftrag nicht gefunden", "Keine Bewertung vorhanden.")
     row = rows[0]
     detail_fields = (
-        ("Auftrag", "order_number", "text"), ("Zusatzbeschreibung", "description", "text"),
+        ("Auftrag", "order_number", "text"), ("Kunde", "customer_name", "text"),
+        ("Zusatzbeschreibung", "description", "text"),
         ("Performance", "performance_status", "text"), ("Ergebnis", "absolute_result", "text"),
         ("Erlöse", "revenue_eur", "money"), ("Kosten", "cost_eur", "money"),
         ("Marge", "margin_eur", "money"),
         ("Kostenabstimmung", "reconciliation_status", "text"),
         ("Rekonstruierte Istkosten", "reconstructed_cost_eur", "money"),
         ("Abweichung Auftragskopf", "reconciliation_difference_eur", "money"),
+        ("Liefermengenprüfung", "delivery_status", "text"),
+        ("Fakturaprüfung", "billing_status", "text"),
+        ("Theoretischer Fakturawert", "theoretical_billing_value_eur", "money"),
+        ("Fakturawert-Abweichung", "billing_difference_eur", "money"),
+        ("Sonderkostenprüfung", "special_cost_status", "text"),
         ("Theoretische Sollkosten", "theoretical_total_cost_eur", "money"),
         ("Theoretisches Ergebnis", "theoretical_result_eur", "money"),
         ("Papier/Karton-Faktor zu Erlös", "paper_cardboard_share_of_revenue", "ratio"),
